@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DOOMSDAY — Leaderboard</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .leaderboard-page {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .leaderboard-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .leaderboard-header h1 {
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+
+    .filter-row {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 10px;
+      padding: 6px 16px;
+      border: 1px solid #333;
+      background: transparent;
+      color: #666;
+      cursor: pointer;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      transition: all 0.2s;
+    }
+    .filter-btn:hover { border-color: #00ff41; color: #00ff41; }
+    .filter-btn.active { border-color: #00ff41; color: #00ff41; background: rgba(0,255,65,0.05); }
+
+    .rank-col {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900;
+      color: #00ff41;
+      font-size: 16px;
+      width: 50px;
+    }
+    .rank-1 { color: #ffd700; text-shadow: 0 0 8px rgba(255,215,0,0.5); }
+    .rank-2 { color: #c0c0c0; text-shadow: 0 0 6px rgba(192,192,192,0.3); }
+    .rank-3 { color: #cd7f32; text-shadow: 0 0 6px rgba(205,127,50,0.3); }
+
+    .first-blood-badge {
+      display: inline-block;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 8px;
+      padding: 2px 6px;
+      border: 1px solid #660022;
+      color: #ff0040;
+      background: rgba(255,0,64,0.1);
+      margin-left: 6px;
+    }
+
+    .hidden-screen {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: #000;
+      z-index: 9999;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .hidden-screen.active { display: flex; }
+    .hidden-screen h2 {
+      font-size: 24px;
+      animation: glitch 2s infinite;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .team-name-col {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .score-col {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 14px;
+      font-weight: 900;
+      color: #00ff41;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a href="/" class="navbar-brand">DOOMSDAY</a>
+    <div class="navbar-links">
+      <a href="/gameboard.html">Gameboard</a>
+      <a href="/leaderboard.html" class="active">Leaderboard</a>
+      <a href="/dashboard.html">Dashboard</a>
+    </div>
+    <div class="navbar-user">
+      <span id="user-name"></span>
+      <button class="btn btn-small btn-danger" onclick="logout()" style="padding:4px 10px;font-size:9px;">Logout</button>
+    </div>
+  </nav>
+
+  <!-- Hidden Screen (when leaderboard is hidden) -->
+  <div class="hidden-screen" id="hidden-screen">
+    <h2 class="glitch-text">The fate of the universe is being decided...</h2>
+    <p style="color:#333;font-size:12px;margin-top:16px;">The leaderboard is currently hidden.</p>
+    <a href="/gameboard.html" class="btn btn-small" style="margin-top:24px;">Return to Gameboard</a>
+  </div>
+
+  <!-- Leaderboard -->
+  <div class="leaderboard-page" id="leaderboard-page">
+    <div class="leaderboard-header">
+      <h1>Leaderboard</h1>
+      <p style="color:#444;font-size:12px;">Live rankings across all teams</p>
+    </div>
+
+    <div class="filter-row">
+      <button class="filter-btn active" onclick="filterCategory(null, this)">All</button>
+      <button class="filter-btn" onclick="filterCategory('AI', this)">AI</button>
+      <button class="filter-btn" onclick="filterCategory('CP', this)">CP</button>
+      <button class="filter-btn" onclick="filterCategory('HEX', this)">HEX</button>
+      <button class="filter-btn" onclick="filterCategory('DEV', this)">DEV</button>
+    </div>
+
+    <table class="data-table" id="leaderboard-table">
+      <thead>
+        <tr>
+          <th style="width:50px;">#</th>
+          <th>Team</th>
+          <th>Score</th>
+          <th>Solved</th>
+          <th>Last Solve</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="leaderboard-body">
+        <tr><td colspan="6" style="text-align:center;color:#333;">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let currentFilter = null;
+
+    async function init() {
+      const res = await fetch('/auth/me');
+      const data = await res.json();
+      if (!data.loggedIn) { window.location.href = '/'; return; }
+      if (data.user.role === 'admin') { window.location.href = '/admin.html'; return; }
+      document.getElementById('user-name').textContent = data.team?.team_name || data.user.name;
+      loadLeaderboard();
+    }
+
+    async function loadLeaderboard() {
+      try {
+        const url = currentFilter ? `/api/leaderboard?category=${currentFilter}` : '/api/leaderboard';
+        const res = await fetch(url);
+
+        if (res.status === 403) {
+          const data = await res.json();
+          if (data.error === 'leaderboard_hidden') {
+            document.getElementById('leaderboard-page').style.display = 'none';
+            document.getElementById('hidden-screen').classList.add('active');
+            return;
+          }
+        }
+
+        document.getElementById('hidden-screen').classList.remove('active');
+        document.getElementById('leaderboard-page').style.display = 'block';
+
+        const teams = await res.json();
+        renderLeaderboard(teams);
+      } catch (e) {
+        console.error('Leaderboard error:', e);
+      }
+    }
+
+    function renderLeaderboard(teams) {
+      const tbody = document.getElementById('leaderboard-body');
+      if (teams.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#444;">No teams yet.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = teams.map(t => {
+        const rankClass = t.rank <= 3 ? `rank-${t.rank}` : '';
+        const lastSolve = t.lastSolveTime ? new Date(t.lastSolveTime).toLocaleTimeString() : '—';
+        const fbBadge = t.firstBloods > 0 ? `<span class="first-blood-badge">🩸 ${t.firstBloods} First Blood</span>` : '';
+
+        return `
+          <tr>
+            <td class="rank-col ${rankClass}">${t.rank}</td>
+            <td class="team-name-col">${escapeHtml(t.teamName)} ${fbBadge}</td>
+            <td class="score-col">${t.score}</td>
+            <td>${t.questionsSolved}</td>
+            <td style="color:#666;font-size:12px;">${lastSolve}</td>
+            <td></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterCategory(cat, btn) {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = cat;
+      loadLeaderboard();
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    async function logout() {
+      await fetch('/auth/logout', { method: 'POST' });
+      window.location.href = '/';
+    }
+
+    // Live updates
+    socket.on('leaderboard_update', () => loadLeaderboard());
+    socket.on('announcement', (msg) => {
+      showToast('📢 ' + msg, 'warning');
+    });
+    socket.on('leaderboard_visibility', (visible) => {
+      if (!visible) {
+        document.getElementById('leaderboard-page').style.display = 'none';
+        document.getElementById('hidden-screen').classList.add('active');
+      } else {
+        loadLeaderboard();
+      }
+    });
+
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast' + (type === 'error' ? ' toast-error' : type === 'warning' ? ' toast-warning' : '');
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    // Auto-refresh every 15 seconds
+    setInterval(loadLeaderboard, 15000);
+
+    init();
+  </script>
+</body>
+</html>

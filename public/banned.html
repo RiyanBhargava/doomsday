@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ELIMINATED</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .banned-page {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 20px;
+      background: #000;
+    }
+    .banned-icon {
+      font-size: 80px;
+      margin-bottom: 20px;
+      animation: flicker 2s infinite;
+    }
+    .banned-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 36px;
+      font-weight: 900;
+      color: #ff0040;
+      text-shadow: 0 0 20px rgba(255,0,64,0.5);
+      animation: glitch 2s infinite;
+      margin-bottom: 16px;
+      letter-spacing: 4px;
+    }
+    .banned-msg {
+      font-family: 'Courier New', monospace;
+      font-size: 16px;
+      color: #660022;
+      margin-bottom: 30px;
+    }
+    .banned-sub {
+      font-size: 12px;
+      color: #220000;
+    }
+  </style>
+</head>
+<body>
+  <div class="banned-page">
+    <div class="banned-icon">💀</div>
+    <h1 class="banned-title">ELIMINATED</h1>
+    <p class="banned-msg">You have been eliminated by Doom.</p>
+    <p class="banned-sub">Your team has been banned from the competition. Contact the organizers if you believe this is an error.</p>
+    <button class="btn btn-danger" onclick="logout()" style="margin-top:30px;">Logout</button>
+  </div>
+
+  <script>
+    async function logout() {
+      await fetch('/auth/logout', { method: 'POST' });
+      window.location.href = '/';
+    }
+  </script>
+</body>
+</html>

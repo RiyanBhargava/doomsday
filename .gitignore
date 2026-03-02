@@ -1,0 +1,6 @@
+node_modules/
+.env
+doomsday.db
+doomsday.db-shm
+doomsday.db-wal
+uploads/

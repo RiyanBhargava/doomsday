@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DOOMSDAY — Admin Panel</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <style>
+    .admin-page { display: flex; min-height: 100vh; flex-direction: column; }
+    .admin-main { display: flex; flex: 1; }
+    .admin-sidebar {
+      width: 200px; background: #050505; border-right: 1px solid #1a1a1a;
+      padding: 16px 0; flex-shrink: 0; position: sticky; top: 53px;
+      height: calc(100vh - 53px); overflow-y: auto;
+    }
+    .admin-sidebar a {
+      display: block; padding: 10px 20px;
+      font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1px; color: #555;
+      border-left: 3px solid transparent; transition: all 0.2s;
+      cursor: pointer;
+    }
+    .admin-sidebar a:hover, .admin-sidebar a.active {
+      color: #00ff41; border-left-color: #00ff41; background: rgba(0,255,65,0.03);
+    }
+    .admin-content { flex: 1; padding: 24px; overflow-y: auto; }
+
+    .admin-section { display: none; }
+    .admin-section.active { display: block; }
+
+    .editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .editor-full { grid-column: 1 / -1; }
+    .preview-pane {
+      background: #0a0a0a; border: 1px solid #1a1a1a; padding: 16px;
+      min-height: 200px; overflow-y: auto; max-height: 400px;
+    }
+    .question-card {
+      background: #0a0a0a; border: 1px solid #1a1a1a; padding: 14px;
+      margin-bottom: 8px; display: flex; align-items: center; gap: 12px;
+      transition: border-color 0.2s;
+    }
+    .question-card:hover { border-color: #333; }
+    .question-card-title { flex: 1; font-family: 'Orbitron';font-size: 11px; }
+    .question-card-cat {
+      font-family: 'Orbitron'; font-size: 9px; padding: 3px 8px;
+      border: 1px solid #004d00; color: #00cc33;
+    }
+    .question-card-actions { display: flex; gap: 6px; }
+
+
+
+    .link-editor-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+    .link-editor-row input { flex: 1; }
+
+    .activity-row { font-size: 12px; }
+    .activity-row td { vertical-align: top; }
+    .activity-type-question_viewed { color: #00aaff; }
+
+    .activity-type-submission { color: #00ff41; }
+
+    .filter-bar {
+      display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;
+    }
+    .filter-bar select, .filter-bar input { max-width: 180px; }
+
+    .setting-row {
+      display: flex; align-items: center; gap: 16px;
+      padding: 12px 0; border-bottom: 1px solid #111;
+    }
+    .setting-label { width: 200px; font-family: 'Orbitron'; font-size: 10px;
+      text-transform: uppercase; letter-spacing: 1px; color: #666; }
+    .setting-value { flex: 1; }
+
+    .toggle-switch {
+      width: 44px; height: 24px; background: #333; border-radius: 12px;
+      position: relative; cursor: pointer; transition: background 0.3s;
+    }
+    .toggle-switch.on { background: #004d00; }
+    .toggle-switch::after {
+      content: ''; width: 18px; height: 18px; background: #666;
+      border-radius: 50%; position: absolute; top: 3px; left: 3px;
+      transition: all 0.3s;
+    }
+    .toggle-switch.on::after { left: 23px; background: #00ff41; }
+
+    .team-row { font-size: 12px; }
+    .team-row td { vertical-align: middle; }
+
+    /* Submissions viewer */
+    .sub-card {
+      background: #0a0a0a; border: 1px solid #1a1a1a; padding: 14px;
+      margin-bottom: 8px;
+    }
+    .sub-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .sub-team { font-family: 'Orbitron'; font-size: 11px; color: #00ff41; }
+    .sub-question { font-size: 11px; color: #666; }
+    .sub-time { font-size: 10px; color: #444; }
+    .sub-value { font-size: 12px; color: #ccc; margin-top: 6px; padding: 8px; background: #050505; border: 1px solid #111; }
+    .sub-files a { color: #00cc33; font-size: 11px; margin-right: 8px; }
+
+    @media (max-width: 768px) {
+      .admin-main { flex-direction: column; }
+      .admin-sidebar {
+        width: 100%; height: auto; position: static;
+        display: flex; flex-wrap: wrap; padding: 8px;
+      }
+      .admin-sidebar a { padding: 6px 12px; border-left: none; border-bottom: 2px solid transparent; }
+      .admin-sidebar a.active { border-bottom-color: #00ff41; }
+      .editor-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="admin-page">
+    <nav class="navbar">
+      <a href="/" class="navbar-brand">DOOMSDAY</a>
+      <div class="navbar-links">
+        <span style="font-family:Orbitron;font-size:10px;color:#ff0040;letter-spacing:2px;">ADMIN PANEL</span>
+      </div>
+      <div class="navbar-user">
+        <span id="admin-email" style="color:#666;font-size:11px;"></span>
+        <button class="btn btn-small btn-danger" onclick="logout()" style="padding:4px 10px;font-size:9px;">Logout</button>
+      </div>
+    </nav>
+
+    <div class="admin-main">
+      <div class="admin-sidebar">
+        <a class="active" onclick="showSection('dashboard-section', this)">Dashboard</a>
+        <a onclick="showSection('questions-section', this)">Questions</a>
+        <a onclick="showSection('submissions-section', this)">Submissions</a>
+        <a onclick="showSection('activity-section', this)">Activity Log</a>
+        <a onclick="showSection('teams-section', this)">Teams</a>
+        <a onclick="showSection('settings-section', this)">Settings</a>
+      </div>
+
+      <div class="admin-content">
+
+        <!-- DASHBOARD -->
+        <div class="admin-section active" id="dashboard-section">
+          <h2 style="font-size:18px;margin-bottom:20px;">Live Statistics</h2>
+          <div class="stat-grid" id="stats-grid">
+            <div class="stat-card"><div class="stat-value" id="stat-teams">0</div><div class="stat-label">Teams</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-submissions">0</div><div class="stat-label">Submissions</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-active">0</div><div class="stat-label">Active (30m)</div></div>
+          </div>
+
+          <h3 style="font-size:14px;margin:20px 0 12px;">Per Category</h3>
+          <div class="stat-grid" id="category-stats"></div>
+
+          <h3 style="font-size:14px;margin:20px 0 12px;">Broadcast Announcement</h3>
+          <div style="display:flex;gap:8px;">
+            <input type="text" class="input-field" id="broadcast-msg" placeholder="Type announcement..." style="flex:1;">
+            <button class="btn btn-primary btn-small" onclick="broadcastAnnouncement()">Send</button>
+          </div>
+        </div>
+
+        <!-- QUESTIONS -->
+        <div class="admin-section" id="questions-section">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <h2 style="font-size:18px;margin:0;">Questions</h2>
+            <button class="btn btn-primary btn-small" onclick="openQuestionEditor()">+ Add Question</button>
+          </div>
+
+          <div id="questions-list"></div>
+
+          <div class="modal-overlay" id="question-editor-modal">
+            <div class="modal" style="max-width:900px;max-height:90vh;overflow-y:auto;">
+              <button class="modal-close" onclick="closeQuestionEditor()">&times;</button>
+              <h2 id="editor-title" style="font-size:16px;">Add Question</h2>
+
+              <div class="editor-grid">
+                <div class="form-group">
+                  <label>Title</label>
+                  <input type="text" class="input-field" id="q-title">
+                </div>
+                <div class="form-group">
+                  <label>Category</label>
+                  <select class="input-field" id="q-category">
+                    <option value="AI">AI</option>
+                    <option value="CP">CP</option>
+                    <option value="HEX">HEX</option>
+                    <option value="DEV">DEV</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Unlock Mode</label>
+                  <select class="input-field" id="q-unlock-mode">
+                    <option value="sequential">Sequential</option>
+                    <option value="immediate">Immediate</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Sort Order</label>
+                  <input type="number" class="input-field" id="q-sort-order" value="0">
+                </div>
+                <div class="form-group">
+                  <label>Visible From (optional)</label>
+                  <input type="datetime-local" class="input-field" id="q-visible-from">
+                </div>
+                <div class="form-group">
+                  <label>Reference Answer <span style="color:#555;font-size:10px;">(admin notes, not checked)</span></label>
+                  <input type="text" class="input-field" id="q-answer" placeholder="Optional reference answer...">
+                </div>
+                <div class="form-group editor-full">
+                  <label>Body (Markdown)</label>
+                  <textarea class="input-field" id="q-body" rows="10" oninput="updatePreview()" placeholder="Write your question in Markdown..."></textarea>
+                </div>
+                <div class="form-group editor-full">
+                  <label>Preview</label>
+                  <div class="preview-pane markdown-body" id="q-preview"></div>
+                </div>
+
+
+
+                <div class="form-group editor-full">
+                  <label>Reference Links</label>
+                  <div id="links-editor"></div>
+                  <button class="btn btn-small" onclick="addLinkRow()" style="margin-top:6px;">+ Add Link</button>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+                <button class="btn btn-small" onclick="closeQuestionEditor()">Cancel</button>
+                <button class="btn btn-primary btn-small" onclick="saveQuestion()">Save</button>
+              </div>
+
+              <div id="upload-section" style="display:none;margin-top:20px;border-top:1px solid #1a1a1a;padding-top:16px;">
+                <label class="form-group" style="display:block;">
+                  <span style="font-family:Orbitron;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#00cc33;">File Attachments</span>
+                </label>
+                <div id="existing-attachments" style="margin-bottom:8px;"></div>
+                <input type="file" id="file-upload" style="color:#666;font-size:12px;">
+                <button class="btn btn-small" onclick="uploadFile()" style="margin-left:8px;">Upload</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUBMISSIONS -->
+        <div class="admin-section" id="submissions-section">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h2 style="font-size:18px;margin:0;">All Submissions</h2>
+            <a href="/admin/export-submissions" class="btn btn-small" download>Export CSV</a>
+          </div>
+
+          <div class="filter-bar">
+            <select class="input-field" id="sub-filter-category" onchange="loadSubmissions()">
+              <option value="">All Categories</option>
+              <option value="AI">AI</option>
+              <option value="CP">CP</option>
+              <option value="HEX">HEX</option>
+              <option value="DEV">DEV</option>
+            </select>
+            <input type="text" class="input-field" id="sub-filter-team" placeholder="Search team..." oninput="debounceLoadSubmissions()">
+          </div>
+
+          <div id="submissions-list"></div>
+          <div style="display:flex;justify-content:center;gap:8px;margin-top:16px;">
+            <button class="btn btn-small" id="sub-prev" onclick="subPage(-1)">&#8592; Prev</button>
+            <span id="sub-page-info" style="color:#666;font-size:11px;padding:6px;"></span>
+            <button class="btn btn-small" id="sub-next" onclick="subPage(1)">Next &#8594;</button>
+          </div>
+        </div>
+
+        <!-- ACTIVITY LOG -->
+        <div class="admin-section" id="activity-section">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h2 style="font-size:18px;margin:0;">Activity Log</h2>
+            <a href="/admin/export-activity" class="btn btn-small" download>Export CSV</a>
+          </div>
+
+          <div class="filter-bar">
+            <select class="input-field" id="activity-filter-category" onchange="loadActivity()">
+              <option value="">All Categories</option>
+              <option value="AI">AI</option>
+              <option value="CP">CP</option>
+              <option value="HEX">HEX</option>
+              <option value="DEV">DEV</option>
+            </select>
+            <select class="input-field" id="activity-filter-type" onchange="loadActivity()">
+              <option value="">All Types</option>
+              <option value="question_viewed">Question Viewed</option>
+
+              <option value="submission">Submission</option>
+            </select>
+            <input type="text" class="input-field" id="activity-filter-team" placeholder="Search team..." oninput="debounceLoadActivity()">
+          </div>
+
+          <div style="overflow-x:auto;">
+            <table class="data-table" id="activity-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Team ID</th>
+                  <th>Team Name</th>
+                  <th>Category</th>
+                  <th>Question</th>
+                  <th>Activity</th>
+                  <th>Value</th>
+                  <th>Since Last</th>
+                </tr>
+              </thead>
+              <tbody id="activity-body">
+                <tr><td colspan="8" style="color:#333;text-align:center;">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="display:flex;justify-content:center;gap:8px;margin-top:16px;">
+            <button class="btn btn-small" id="activity-prev" onclick="activityPage(-1)">&#8592; Prev</button>
+            <span id="activity-page-info" style="color:#666;font-size:11px;padding:6px;"></span>
+            <button class="btn btn-small" id="activity-next" onclick="activityPage(1)">Next &#8594;</button>
+          </div>
+        </div>
+
+        <!-- TEAMS -->
+        <div class="admin-section" id="teams-section">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <h2 style="font-size:18px;margin:0;">Team Management</h2>
+            <button class="btn btn-primary btn-small" onclick="openRegisterTeamModal()">+ Register Team</button>
+          </div>
+
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Team Name</th>
+                <th>Members</th>
+                <th>Submissions</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="teams-body">
+              <tr><td colspan="6" style="color:#333;text-align:center;">Loading...</td></tr>
+            </tbody>
+          </table>
+
+          <div class="modal-overlay" id="register-team-modal">
+            <div class="modal">
+              <button class="modal-close" onclick="closeModal('register-team-modal')">&times;</button>
+              <h2>Create Team Manually</h2>
+              <div class="form-group">
+                <label>Team Name</label>
+                <input type="text" class="input-field" id="reg-team-name">
+              </div>
+              <div class="form-group">
+                <label>Team Code</label>
+                <input type="text" class="input-field" id="reg-team-code" placeholder="Code for members to join">
+              </div>
+              <p id="reg-error" style="color:#ff0040;font-size:12px;display:none;"></p>
+              <button class="btn btn-primary" onclick="registerTeamManual()" style="width:100%;margin-top:10px;">Create</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div class="admin-section" id="settings-section">
+          <h2 style="font-size:18px;margin-bottom:20px;">Competition Settings</h2>
+
+          <div class="setting-row">
+            <div class="setting-label">Competition Start</div>
+            <div class="setting-value">
+              <input type="datetime-local" class="input-field" id="setting-start" style="max-width:300px;">
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">Competition End</div>
+            <div class="setting-value">
+              <input type="datetime-local" class="input-field" id="setting-end" style="max-width:300px;">
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">Maintenance Mode</div>
+            <div class="setting-value">
+              <div class="toggle-switch" id="toggle-maintenance" onclick="toggleSetting(this, 'maintenance_mode')"></div>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" onclick="saveSettings()" style="margin-top:20px;">Save Settings</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+
+  <script>
+    const socket = io();
+    let editingQuestionId = null;
+    let activityOffset = 0;
+    let subOffset = 0;
+    const PAGE_LIMIT = 50;
+    let debounceTimer = null;
+    let debounceTimerSub = null;
+
+    // Init
+    async function init() {
+      const res = await fetch('/auth/me');
+      const data = await res.json();
+      if (!data.loggedIn || data.user.role !== 'admin') {
+        window.location.href = '/';
+        return;
+      }
+      document.getElementById('admin-email').textContent = data.user.email;
+      loadStats();
+      loadQuestions();
+      loadActivity();
+      loadTeams();
+      loadSettings();
+    }
+
+    // Section Nav
+    function showSection(sectionId, link) {
+      document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
+      document.getElementById(sectionId).classList.add('active');
+      document.querySelectorAll('.admin-sidebar a').forEach(a => a.classList.remove('active'));
+      link.classList.add('active');
+
+      if (sectionId === 'dashboard-section') loadStats();
+      if (sectionId === 'activity-section') loadActivity();
+      if (sectionId === 'teams-section') loadTeams();
+      if (sectionId === 'submissions-section') loadSubmissions();
+    }
+
+    // ── DASHBOARD ─────────────────────────────────────────────────────────────
+    async function loadStats() {
+      try {
+        const res = await fetch('/admin/stats');
+        const data = await res.json();
+
+        document.getElementById('stat-teams').textContent = data.totalTeams;
+        document.getElementById('stat-submissions').textContent = data.totalSubmissions;
+        document.getElementById('stat-active').textContent = data.activeUsers;
+
+        const catContainer = document.getElementById('category-stats');
+        catContainer.innerHTML = '';
+        for (const [cat, info] of Object.entries(data.perCategory)) {
+          catContainer.innerHTML += `
+            <div class="stat-card">
+              <div class="stat-value" style="font-size:16px;">${cat}</div>
+              <div style="font-size:12px;color:#666;margin-top:6px;">
+                ${info.questions} Q &middot; ${info.submissions} submissions
+              </div>
+            </div>
+          `;
+        }
+      } catch (e) { console.error('Stats error:', e); }
+    }
+
+    async function broadcastAnnouncement() {
+      const msg = document.getElementById('broadcast-msg').value.trim();
+      if (!msg) return;
+      try {
+        await fetch('/admin/announcement', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg })
+        });
+        socket.emit('broadcast_announcement', msg);
+        document.getElementById('broadcast-msg').value = '';
+        showToast('Announcement sent');
+      } catch (e) { showToast('Failed', 'error'); }
+    }
+
+    // ── QUESTIONS ─────────────────────────────────────────────────────────────
+    async function loadQuestions() {
+      try {
+        const res = await fetch('/admin/questions');
+        const questions = await res.json();
+        const container = document.getElementById('questions-list');
+
+        const categories = { AI: [], CP: [], HEX: [], DEV: [] };
+        questions.forEach(q => {
+          if (categories[q.category]) categories[q.category].push(q);
+        });
+
+        container.innerHTML = '';
+        for (const [cat, qs] of Object.entries(categories)) {
+          if (qs.length === 0) continue;
+          container.innerHTML += `<h3 style="font-size:13px;margin:16px 0 8px;">${cat} (${qs.length})</h3>`;
+          qs.forEach(q => {
+            container.innerHTML += `
+              <div class="question-card">
+                <span class="question-card-cat">${q.category}</span>
+                <span class="question-card-title">${escapeHtml(q.title)}</span>
+                <span style="color:#666;font-size:11px;">#${q.sort_order}</span>
+                <div class="question-card-actions">
+                  <button class="btn btn-small" onclick="editQuestion(${q.id})">Edit</button>
+                  <button class="btn btn-small btn-danger" onclick="deleteQuestion(${q.id})">Del</button>
+                </div>
+              </div>
+            `;
+          });
+        }
+
+        if (questions.length === 0) {
+          container.innerHTML = '<p style="color:#444;text-align:center;">No questions yet. Click "+ Add Question" to create one.</p>';
+        }
+      } catch (e) { console.error('Questions error:', e); }
+    }
+
+    function openQuestionEditor(question) {
+      editingQuestionId = question ? question.id : null;
+      document.getElementById('editor-title').textContent = question ? 'Edit Question' : 'Add Question';
+
+      document.getElementById('q-title').value = question ? question.title : '';
+      document.getElementById('q-category').value = question ? question.category : 'AI';
+      document.getElementById('q-answer').value = question ? (question.answer || '') : '';
+      document.getElementById('q-unlock-mode').value = question ? question.unlock_mode : 'sequential';
+      document.getElementById('q-sort-order').value = question ? question.sort_order : 0;
+      document.getElementById('q-visible-from').value = question && question.visible_from ? question.visible_from.slice(0, 16) : '';
+      document.getElementById('q-body').value = question ? question.body_markdown : '';
+      updatePreview();
+
+      const linksContainer = document.getElementById('links-editor');
+      linksContainer.innerHTML = '';
+      if (question && question.links) {
+        question.links.forEach(l => addLinkRow(l.label, l.url));
+      }
+
+      const uploadSection = document.getElementById('upload-section');
+      uploadSection.style.display = question ? 'block' : 'none';
+      if (question && question.attachments) {
+        renderAttachments(question.attachments);
+      }
+
+      document.getElementById('question-editor-modal').classList.add('active');
+    }
+
+    function closeQuestionEditor() {
+      document.getElementById('question-editor-modal').classList.remove('active');
+      editingQuestionId = null;
+    }
+
+    async function editQuestion(id) {
+      try {
+        const res = await fetch(`/admin/question/${id}`);
+        const q = await res.json();
+        openQuestionEditor(q);
+      } catch (e) { showToast('Failed to load question', 'error'); }
+    }
+
+    async function deleteQuestion(id) {
+      if (!confirm('Delete this question permanently?')) return;
+      try {
+        await fetch(`/admin/question/${id}`, { method: 'DELETE' });
+        showToast('Question deleted');
+        loadQuestions();
+      } catch (e) { showToast('Failed', 'error'); }
+    }
+
+    async function saveQuestion() {
+      const data = {
+        title: document.getElementById('q-title').value,
+        category: document.getElementById('q-category').value,
+        body_markdown: document.getElementById('q-body').value,
+        answer: document.getElementById('q-answer').value || '',
+        answer_mode: 'exact',
+        points: 0,
+        unlock_mode: document.getElementById('q-unlock-mode').value,
+        sort_order: parseInt(document.getElementById('q-sort-order').value) || 0,
+        visible_from: document.getElementById('q-visible-from').value || null,
+        links: getLinks()
+      };
+
+      if (!data.title || !data.body_markdown) {
+        showToast('Title and body are required', 'error');
+        return;
+      }
+
+      try {
+        const url = editingQuestionId ? `/admin/question/${editingQuestionId}` : '/admin/question';
+        const method = editingQuestionId ? 'PUT' : 'POST';
+
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const result = await res.json();
+
+        if (result.success || result.id) {
+          showToast(editingQuestionId ? 'Question updated' : 'Question created');
+          if (!editingQuestionId && result.id) {
+            editingQuestionId = result.id;
+            document.getElementById('upload-section').style.display = 'block';
+          }
+          loadQuestions();
+          if (editingQuestionId) {
+            editQuestion(editingQuestionId);
+          } else {
+            closeQuestionEditor();
+          }
+        }
+      } catch (e) { showToast('Save failed', 'error'); }
+    }
+
+    function updatePreview() {
+      const md = document.getElementById('q-body').value;
+      document.getElementById('q-preview').innerHTML = renderMarkdown(md);
+      document.querySelectorAll('#q-preview pre code').forEach(block => hljs.highlightElement(block));
+    }
+
+    function renderMarkdown(md) {
+      if (!md) return '';
+      let text = md;
+      text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
+        try { return '<div>' + katex.renderToString(math, { displayMode: true }) + '</div>'; }
+        catch (e) { return '$$' + math + '$$'; }
+      });
+      text = text.replace(/\$([^\$\n]+?)\$/g, (_, math) => {
+        try { return katex.renderToString(math, { displayMode: false }); }
+        catch (e) { return '$' + math + '$'; }
+      });
+      return marked.parse(text);
+    }
+
+    // Links
+    function addLinkRow(label = '', url = '') {
+      const container = document.getElementById('links-editor');
+      const row = document.createElement('div');
+      row.className = 'link-editor-row';
+      row.innerHTML = `
+        <input type="text" class="input-field link-label-input" placeholder="Label" value="${escapeAttr(label)}">
+        <input type="url" class="input-field link-url-input" placeholder="https://..." value="${escapeAttr(url)}">
+        <button class="btn btn-small btn-danger" onclick="this.parentElement.remove()" style="padding:4px 8px;">&times;</button>
+      `;
+      container.appendChild(row);
+    }
+
+    function getLinks() {
+      const rows = document.querySelectorAll('#links-editor .link-editor-row');
+      return Array.from(rows).map(row => ({
+        label: row.querySelector('.link-label-input').value,
+        url: row.querySelector('.link-url-input').value
+      })).filter(l => l.label.trim() && l.url.trim());
+    }
+
+    // Attachments
+    function renderAttachments(attachments) {
+      const container = document.getElementById('existing-attachments');
+      container.innerHTML = attachments.map(a =>
+        `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <span style="color:#666;font-size:12px;">&#128206; ${escapeHtml(a.filename)}</span>
+          <button class="btn btn-small btn-danger" onclick="deleteAttachment(${a.id})" style="padding:2px 6px;font-size:8px;">&times;</button>
+        </div>`
+      ).join('');
+    }
+
+    async function uploadFile() {
+      if (!editingQuestionId) { showToast('Save the question first', 'warning'); return; }
+      const fileInput = document.getElementById('file-upload');
+      if (!fileInput.files[0]) return;
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      try {
+        const res = await fetch(`/admin/question/${editingQuestionId}/upload`, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('File uploaded');
+          editQuestion(editingQuestionId);
+        }
+      } catch (e) { showToast('Upload failed', 'error'); }
+    }
+
+    async function deleteAttachment(id) {
+      try {
+        await fetch(`/admin/attachment/${id}`, { method: 'DELETE' });
+        showToast('Attachment removed');
+        editQuestion(editingQuestionId);
+      } catch (e) { showToast('Failed', 'error'); }
+    }
+
+    // ── SUBMISSIONS ───────────────────────────────────────────────────────────
+    async function loadSubmissions() {
+      try {
+        const category = document.getElementById('sub-filter-category').value;
+        const team = document.getElementById('sub-filter-team').value;
+
+        const params = new URLSearchParams({ limit: PAGE_LIMIT, offset: subOffset });
+        if (category) params.set('category', category);
+        if (team) params.set('team', team);
+
+        const res = await fetch(`/admin/submissions?${params}`);
+        const data = await res.json();
+
+        const container = document.getElementById('submissions-list');
+        if (data.rows.length === 0) {
+          container.innerHTML = '<p style="color:#333;text-align:center;">No submissions yet.</p>';
+        } else {
+          container.innerHTML = data.rows.map(s => {
+            const time = new Date(s.submitted_at).toLocaleString();
+            return `
+              <div class="sub-card">
+                <div class="sub-card-header">
+                  <div>
+                    <span class="sub-team">${escapeHtml(s.team_name)}</span>
+                    <span style="color:#333;margin:0 6px;">|</span>
+                    <span class="sub-question">${escapeHtml(s.question_title)} (${s.category})</span>
+                  </div>
+                  <span class="sub-time">${time}</span>
+                </div>
+                ${s.submitted_value ? `<div class="sub-value">${escapeHtml(s.submitted_value)}</div>` : ''}
+                ${s.files && s.files.length > 0 ? `<div class="sub-files" style="margin-top:6px;">${s.files.map(f => `<a href="/${f.filepath}" download="${escapeAttr(f.filename)}">&#128206; ${escapeHtml(f.filename)}</a>`).join('')}</div>` : ''}
+              </div>
+            `;
+          }).join('');
+        }
+
+        const page = Math.floor(subOffset / PAGE_LIMIT) + 1;
+        const totalPages = Math.ceil(data.total / PAGE_LIMIT) || 1;
+        document.getElementById('sub-page-info').textContent = `Page ${page} of ${totalPages}`;
+        document.getElementById('sub-prev').disabled = subOffset === 0;
+        document.getElementById('sub-next').disabled = subOffset + PAGE_LIMIT >= data.total;
+      } catch (e) { console.error('Submissions error:', e); }
+    }
+
+    function subPage(dir) {
+      subOffset = Math.max(0, subOffset + dir * PAGE_LIMIT);
+      loadSubmissions();
+    }
+
+    function debounceLoadSubmissions() {
+      clearTimeout(debounceTimerSub);
+      debounceTimerSub = setTimeout(() => { subOffset = 0; loadSubmissions(); }, 300);
+    }
+
+    // ── ACTIVITY LOG ──────────────────────────────────────────────────────────
+    async function loadActivity() {
+      try {
+        const category = document.getElementById('activity-filter-category').value;
+        const type = document.getElementById('activity-filter-type').value;
+        const team = document.getElementById('activity-filter-team').value;
+
+        const params = new URLSearchParams({ limit: PAGE_LIMIT, offset: activityOffset });
+        if (category) params.set('category', category);
+        if (type) params.set('type', type);
+        if (team) params.set('team', team);
+
+        const res = await fetch(`/admin/activity?${params}`);
+        const data = await res.json();
+
+        const tbody = document.getElementById('activity-body');
+        if (data.rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" style="color:#333;text-align:center;">No activity yet</td></tr>';
+        } else {
+          tbody.innerHTML = data.rows.map(row => {
+            const typeLabel = row.activity_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            const time = new Date(row.created_at).toLocaleString();
+            const sinceLast = row.timeSinceLast !== null ? formatDuration(row.timeSinceLast) : '—';
+            const value = row.submitted_value || '';
+
+            return `
+              <tr class="activity-row">
+                <td style="font-size:11px;color:#666;white-space:nowrap;">${time}</td>
+                <td>${escapeHtml(row.team_code || '')}</td>
+                <td>${escapeHtml(row.team_name)}</td>
+                <td>${row.question_category || ''}</td>
+                <td style="font-size:11px;">${escapeHtml(row.question_title || '')}</td>
+                <td><span class="activity-type-${row.activity_type}" style="font-size:11px;font-weight:bold;">${typeLabel}</span></td>
+                <td><span class="blurred-value" onclick="this.classList.toggle('revealed')">${escapeHtml(value)}</span></td>
+                <td style="color:#666;font-size:11px;">${sinceLast}</td>
+              </tr>
+            `;
+          }).join('');
+        }
+
+        const page = Math.floor(activityOffset / PAGE_LIMIT) + 1;
+        const totalPages = Math.ceil(data.total / PAGE_LIMIT) || 1;
+        document.getElementById('activity-page-info').textContent = `Page ${page} of ${totalPages}`;
+        document.getElementById('activity-prev').disabled = activityOffset === 0;
+        document.getElementById('activity-next').disabled = activityOffset + PAGE_LIMIT >= data.total;
+      } catch (e) { console.error('Activity error:', e); }
+    }
+
+    function activityPage(dir) {
+      activityOffset = Math.max(0, activityOffset + dir * PAGE_LIMIT);
+      loadActivity();
+    }
+
+    function debounceLoadActivity() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => { activityOffset = 0; loadActivity(); }, 300);
+    }
+
+    function formatDuration(seconds) {
+      if (seconds < 60) return seconds + 's';
+      if (seconds < 3600) return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
+      return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+    }
+
+    // ── TEAMS ─────────────────────────────────────────────────────────────────
+    async function loadTeams() {
+      try {
+        const res = await fetch('/admin/teams');
+        const teams = await res.json();
+        const tbody = document.getElementById('teams-body');
+
+        tbody.innerHTML = teams.map(t => {
+          const membersList = (t.members || []).map(m => escapeHtml(m.email)).join('<br>');
+          return `
+          <tr class="team-row">
+            <td style="font-family:Orbitron;font-size:11px;color:#00ff41;">${t.id}</td>
+            <td style="font-family:Orbitron;font-size:11px;">${escapeHtml(t.team_name)}</td>
+            <td style="color:#666;font-size:11px;">${membersList || '<span style="color:#333">No members</span>'} <span style="color:#444;font-size:9px;">(${t.member_count}/4)</span></td>
+            <td style="color:#00ff41;font-family:Orbitron;">${t.submission_count}</td>
+            <td>${t.banned ? '<span class="badge badge-red">Banned</span>' : '<span class="badge badge-green">Active</span>'}</td>
+            <td>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                ${t.banned
+                  ? `<button class="btn btn-small" onclick="unbanTeam(${t.id})" style="padding:3px 8px;font-size:8px;">Unban</button>`
+                  : `<button class="btn btn-small btn-danger" onclick="banTeam(${t.id})" style="padding:3px 8px;font-size:8px;">Ban</button>`
+                }
+                <button class="btn btn-small" onclick="resetTeam(${t.id})" style="padding:3px 8px;font-size:8px;">Reset</button>
+              </div>
+            </td>
+          </tr>
+        `}).join('');
+
+        if (teams.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="color:#333;text-align:center;">No teams registered</td></tr>';
+        }
+      } catch (e) { console.error('Teams error:', e); }
+    }
+
+    async function banTeam(id) {
+      if (!confirm('Ban this team?')) return;
+      await fetch(`/admin/team/ban/${id}`, { method: 'POST' });
+      showToast('Team banned');
+      loadTeams();
+    }
+
+    async function unbanTeam(id) {
+      await fetch(`/admin/team/unban/${id}`, { method: 'POST' });
+      showToast('Team unbanned');
+      loadTeams();
+    }
+
+    async function resetTeam(id) {
+      if (!confirm('Reset all progress for this team? This cannot be undone.')) return;
+      await fetch(`/admin/team/reset/${id}`, { method: 'POST' });
+      showToast('Team progress reset');
+      loadTeams();
+    }
+
+    function openRegisterTeamModal() {
+      document.getElementById('register-team-modal').classList.add('active');
+    }
+
+    async function registerTeamManual() {
+      const teamName = document.getElementById('reg-team-name').value.trim();
+      const teamCode = document.getElementById('reg-team-code').value.trim();
+      const errEl = document.getElementById('reg-error');
+
+      if (!teamName || !teamCode) {
+        errEl.textContent = 'All fields required';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      try {
+        const res = await fetch('/admin/team/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teamName, teamCode })
+        });
+        const data = await res.json();
+        if (data.error) {
+          errEl.textContent = data.error;
+          errEl.style.display = 'block';
+          return;
+        }
+        showToast('Team registered');
+        closeModal('register-team-modal');
+        loadTeams();
+      } catch (e) {
+        errEl.textContent = 'Failed';
+        errEl.style.display = 'block';
+      }
+    }
+
+    // ── SETTINGS ──────────────────────────────────────────────────────────────
+    async function loadSettings() {
+      try {
+        const res = await fetch('/admin/settings');
+        const settings = await res.json();
+
+        document.getElementById('setting-start').value = settings.competition_start ? settings.competition_start.slice(0, 16) : '';
+        document.getElementById('setting-end').value = settings.competition_end ? settings.competition_end.slice(0, 16) : '';
+
+        const mm = document.getElementById('toggle-maintenance');
+        if (settings.maintenance_mode === '1') mm.classList.add('on'); else mm.classList.remove('on');
+      } catch (e) { console.error('Settings error:', e); }
+    }
+
+    function toggleSetting(el, key) {
+      el.classList.toggle('on');
+      const value = el.classList.contains('on') ? '1' : '0';
+      fetch('/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: value })
+      });
+
+      if (key === 'maintenance_mode') {
+        socket.emit('maintenance_change', value === '1');
+      }
+    }
+
+    async function saveSettings() {
+      const data = {
+        competition_start: document.getElementById('setting-start').value || '',
+        competition_end: document.getElementById('setting-end').value || ''
+      };
+
+      try {
+        await fetch('/admin/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        showToast('Settings saved');
+      } catch (e) { showToast('Failed', 'error'); }
+    }
+
+    // ── Utilities ─────────────────────────────────────────────────────────────
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('active');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function escapeAttr(str) {
+      return (str || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    async function logout() {
+      await fetch('/auth/logout', { method: 'POST' });
+      window.location.href = '/';
+    }
+
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast' + (type === 'error' ? ' toast-error' : type === 'warning' ? ' toast-warning' : '');
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    // Socket events
+    socket.on('new_activity', () => {
+      if (document.getElementById('activity-section').classList.contains('active')) loadActivity();
+      if (document.getElementById('submissions-section').classList.contains('active')) loadSubmissions();
+    });
+
+    setInterval(() => {
+      if (document.getElementById('dashboard-section').classList.contains('active')) loadStats();
+    }, 10000);
+
+    init();
+  </script>
+</body>
+</html>

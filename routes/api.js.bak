@@ -1,0 +1,368 @@
+// routes/api.js — Participant-facing API routes
+const express = require('express');
+const router = express.Router();
+const db = require('../database');
+const { requireLogin, requireTeam, checkMaintenance } = require('../middleware/auth');
+
+// ── Helper: check competition time ──────────────────────────────────────────
+function isCompetitionActive() {
+  const start = db.prepare("SELECT value FROM settings WHERE key = 'competition_start'").get();
+  const end = db.prepare("SELECT value FROM settings WHERE key = 'competition_end'").get();
+  const now = new Date();
+
+  if (start && start.value && new Date(start.value) > now) return { active: false, reason: 'not_started', start: start.value, end: end?.value };
+  if (end && end.value && new Date(end.value) < now) return { active: false, reason: 'ended', start: start?.value, end: end.value };
+  return { active: true, start: start?.value, end: end?.value };
+}
+
+// ── GET /api/competition-info ───────────────────────────────────────────────
+router.get('/competition-info', (req, res) => {
+  const status = isCompetitionActive();
+  const maintenance = db.prepare("SELECT value FROM settings WHERE key = 'maintenance_mode'").get();
+  res.json({ ...status, maintenance: maintenance?.value === '1' });
+});
+
+// ── GET /api/questions/:category ─────────────────────────────────────────────
+router.get('/questions/:category', requireLogin, requireTeam, checkMaintenance, (req, res) => {
+  const category = req.params.category.toUpperCase();
+  if (!['AI', 'CP', 'HEX', 'DEV'].includes(category)) {
+    return res.status(400).json({ error: 'Invalid category' });
+  }
+
+  const questions = db.prepare(`
+    SELECT id, title, category, points, sort_order, unlock_mode, visible_from
+    FROM questions WHERE category = ? ORDER BY sort_order ASC
+  `).all(category);
+
+  // Get solved questions for this team
+  const solvedIds = db.prepare(`
+    SELECT question_id FROM solved WHERE team_id = ?
+  `).all(req.team.id).map(s => s.question_id);
+
+  const now = new Date();
+  let lastSolved = true; // First question is always unlocked
+
+  const result = questions.map((q, index) => {
+    const isSolved = solvedIds.includes(q.id);
+    const isVisible = !q.visible_from || new Date(q.visible_from) <= now;
+
+    let isUnlocked;
+    if (q.unlock_mode === 'immediate') {
+      isUnlocked = true;
+    } else {
+      // Sequential: unlocked if previous is solved or it's the first
+      isUnlocked = lastSolved;
+    }
+
+    if (!isSolved && q.unlock_mode === 'sequential') {
+      lastSolved = false;
+    } else if (isSolved) {
+      lastSolved = true;
+    }
+
+    return {
+      id: q.id,
+      title: q.title,
+      category: q.category,
+      points: q.points,
+      solved: isSolved,
+      unlocked: isUnlocked && isVisible,
+      sort_order: q.sort_order
+    };
+  });
+
+  res.json(result);
+});
+
+// ── GET /api/question/:id — Full question detail ─────────────────────────────
+router.get('/question/:id', requireLogin, requireTeam, checkMaintenance, (req, res) => {
+  const question = db.prepare('SELECT id, title, category, body_markdown, points, answer_mode, sort_order, unlock_mode, visible_from FROM questions WHERE id = ?').get(req.params.id);
+  if (!question) return res.status(404).json({ error: 'Question not found' });
+
+  // Check if unlocked for this team
+  if (question.unlock_mode === 'sequential') {
+    const prevQ = db.prepare('SELECT id FROM questions WHERE category = ? AND sort_order < ? ORDER BY sort_order DESC LIMIT 1').get(question.category, question.sort_order);
+    if (prevQ) {
+      const prevSolved = db.prepare('SELECT id FROM solved WHERE team_id = ? AND question_id = ?').get(req.team.id, prevQ.id);
+      if (!prevSolved) return res.status(403).json({ error: 'Question locked' });
+    }
+  }
+
+  // Log view
+  db.prepare('INSERT INTO question_views (team_id, question_id) VALUES (?, ?)').run(req.team.id, question.id);
+  db.prepare(`INSERT INTO activity_log (team_id, question_id, activity_type, category) VALUES (?, ?, 'question_viewed', ?)`).run(req.team.id, question.id, question.category);
+
+  // Get hints (without text, just IDs and penalties)
+  const hints = db.prepare('SELECT id, time_penalty, sort_order FROM hints WHERE question_id = ? ORDER BY sort_order ASC').all(question.id);
+  const revealedHints = db.prepare('SELECT hint_id FROM hint_reveals WHERE team_id = ?').all(req.team.id).map(h => h.hint_id);
+  const hintsWithStatus = hints.map(h => ({
+    id: h.id,
+    time_penalty: h.time_penalty,
+    revealed: revealedHints.includes(h.id),
+    sort_order: h.sort_order
+  }));
+
+  // Get attachments
+  const attachments = db.prepare('SELECT id, filename, filepath FROM attachments WHERE question_id = ?').all(question.id);
+
+  // Get reference links
+  const links = db.prepare('SELECT id, label, url FROM reference_links WHERE question_id = ?').all(question.id);
+
+  // Get attempt count
+  const attempts = db.prepare('SELECT COUNT(*) as count FROM submissions WHERE team_id = ? AND question_id = ?').get(req.team.id, question.id);
+
+  // Check if solved
+  const solved = db.prepare('SELECT id FROM solved WHERE team_id = ? AND question_id = ?').get(req.team.id, question.id);
+
+  // First view time for this question
+  const firstView = db.prepare('SELECT viewed_at FROM question_views WHERE team_id = ? AND question_id = ? ORDER BY viewed_at ASC LIMIT 1').get(req.team.id, question.id);
+
+  res.json({
+    ...question,
+    hints: hintsWithStatus,
+    attachments,
+    links,
+    attempts: attempts.count,
+    solved: !!solved,
+    firstViewedAt: firstView?.viewed_at
+  });
+});
+
+// ── POST /api/reveal-hint/:hintId ────────────────────────────────────────────
+router.post('/reveal-hint/:hintId', requireLogin, requireTeam, checkMaintenance, (req, res) => {
+  const hint = db.prepare('SELECT h.*, q.category FROM hints h JOIN questions q ON h.question_id = q.id WHERE h.id = ?').get(req.params.hintId);
+  if (!hint) return res.status(404).json({ error: 'Hint not found' });
+
+  // Check if already revealed
+  const already = db.prepare('SELECT id FROM hint_reveals WHERE team_id = ? AND hint_id = ?').get(req.team.id, hint.id);
+  if (already) {
+    const hintText = db.prepare('SELECT hint_text FROM hints WHERE id = ?').get(hint.id);
+    return res.json({ hint_text: hintText.hint_text, already_revealed: true });
+  }
+
+  // Apply penalty
+  const penaltyMultiplier = db.prepare("SELECT value FROM settings WHERE key = 'hint_penalty_multiplier'").get();
+  const penalty = hint.time_penalty * (parseFloat(penaltyMultiplier?.value) || 1);
+
+  db.prepare('INSERT INTO hint_reveals (team_id, hint_id, penalty_applied) VALUES (?, ?, ?)').run(req.team.id, hint.id, penalty);
+
+  // Log activity
+  db.prepare(`INSERT INTO activity_log (team_id, question_id, activity_type, category, metadata) VALUES (?, ?, 'hint_viewed', ?, ?)`).run(
+    req.team.id, hint.question_id, hint.category, JSON.stringify({ hint_id: hint.id, penalty })
+  );
+
+  res.json({ hint_text: hint.hint_text, penalty_applied: penalty });
+});
+
+// ── POST /api/submit/:questionId ─────────────────────────────────────────────
+router.post('/submit/:questionId', requireLogin, requireTeam, checkMaintenance, (req, res) => {
+  const question = db.prepare('SELECT * FROM questions WHERE id = ?').get(req.params.questionId);
+  if (!question) return res.status(404).json({ error: 'Question not found' });
+
+  // Check if already solved
+  const alreadySolved = db.prepare('SELECT id FROM solved WHERE team_id = ? AND question_id = ?').get(req.team.id, question.id);
+  if (alreadySolved) return res.status(400).json({ error: 'Already solved', correct: true });
+
+  const { answer } = req.body;
+  if (!answer) return res.status(400).json({ error: 'No answer provided' });
+
+  // Calculate time taken since first view
+  const firstView = db.prepare('SELECT viewed_at FROM question_views WHERE team_id = ? AND question_id = ? ORDER BY viewed_at ASC LIMIT 1').get(req.team.id, question.id);
+  const timeTaken = firstView ? Math.floor((Date.now() - new Date(firstView.viewed_at).getTime()) / 1000) : 0;
+
+  // Validate answer
+  let isCorrect = false;
+  const correctAnswer = question.answer;
+  const submittedAnswer = answer.trim();
+
+  switch (question.answer_mode) {
+    case 'exact':
+      isCorrect = submittedAnswer === correctAnswer;
+      break;
+    case 'case-insensitive':
+      isCorrect = submittedAnswer.toLowerCase() === correctAnswer.toLowerCase();
+      break;
+    case 'contains':
+      isCorrect = submittedAnswer.toLowerCase().includes(correctAnswer.toLowerCase());
+      break;
+    default:
+      isCorrect = submittedAnswer === correctAnswer;
+  }
+
+  // Log submission
+  db.prepare('INSERT INTO submissions (team_id, question_id, submitted_value, is_correct, time_taken) VALUES (?, ?, ?, ?, ?)').run(
+    req.team.id, question.id, submittedAnswer, isCorrect ? 1 : 0, timeTaken
+  );
+
+  if (isCorrect) {
+    // Calculate points (subtract hint penalties)
+    const hintPenalties = db.prepare(`
+      SELECT COALESCE(SUM(penalty_applied), 0) as total FROM hint_reveals 
+      WHERE team_id = ? AND hint_id IN (SELECT id FROM hints WHERE question_id = ?)
+    `).get(req.team.id, question.id);
+
+    // Wrong answer penalty
+    const wrongPenaltySetting = db.prepare("SELECT value FROM settings WHERE key = 'wrong_answer_penalty'").get();
+    const wrongPenalty = parseInt(wrongPenaltySetting?.value) || 0;
+    const wrongAttempts = db.prepare('SELECT COUNT(*) as count FROM submissions WHERE team_id = ? AND question_id = ? AND is_correct = 0').get(req.team.id, question.id);
+
+    const pointsAwarded = Math.max(0, question.points - hintPenalties.total - (wrongAttempts.count * wrongPenalty));
+
+    db.prepare('INSERT OR IGNORE INTO solved (team_id, question_id, points_awarded) VALUES (?, ?, ?)').run(req.team.id, question.id, pointsAwarded);
+
+    // Update team score
+    const totalScore = db.prepare('SELECT COALESCE(SUM(points_awarded), 0) as total FROM solved WHERE team_id = ?').get(req.team.id);
+    db.prepare('UPDATE teams SET score = ? WHERE id = ?').run(totalScore.total, req.team.id);
+
+    // Check if first solver
+    const firstSolver = db.prepare('SELECT team_id FROM solved WHERE question_id = ? ORDER BY solved_at ASC LIMIT 1').get(question.id);
+    const isFirstBlood = firstSolver && firstSolver.team_id === req.team.id;
+
+    // Check if category complete
+    const totalInCategory = db.prepare('SELECT COUNT(*) as count FROM questions WHERE category = ?').get(question.category);
+    const solvedInCategory = db.prepare('SELECT COUNT(*) as count FROM solved WHERE team_id = ? AND question_id IN (SELECT id FROM questions WHERE category = ?)').get(req.team.id, question.category);
+    const categoryComplete = solvedInCategory.count >= totalInCategory.count;
+
+    // Log activity
+    db.prepare(`INSERT INTO activity_log (team_id, question_id, activity_type, category, submitted_value, metadata) VALUES (?, ?, 'correct_submission', ?, ?, ?)`).run(
+      req.team.id, question.id, question.category, submittedAnswer,
+      JSON.stringify({ points: pointsAwarded, time_taken: timeTaken, first_blood: isFirstBlood })
+    );
+
+    res.json({
+      correct: true,
+      points: pointsAwarded,
+      firstBlood: isFirstBlood,
+      categoryComplete,
+      totalScore: totalScore.total
+    });
+  } else {
+    // Log wrong submission
+    db.prepare(`INSERT INTO activity_log (team_id, question_id, activity_type, category, submitted_value) VALUES (?, ?, 'wrong_submission', ?, ?)`).run(
+      req.team.id, question.id, question.category, submittedAnswer
+    );
+
+    res.json({ correct: false });
+  }
+});
+
+// ── GET /api/progress — Team's overall progress ─────────────────────────────
+router.get('/progress', requireLogin, requireTeam, (req, res) => {
+  const categories = ['AI', 'CP', 'HEX', 'DEV'];
+  const progress = {};
+
+  for (const cat of categories) {
+    const total = db.prepare('SELECT COUNT(*) as count FROM questions WHERE category = ?').get(cat);
+    const solved = db.prepare('SELECT COUNT(*) as count FROM solved WHERE team_id = ? AND question_id IN (SELECT id FROM questions WHERE category = ?)').get(req.team.id, cat);
+    progress[cat] = { total: total.count, solved: solved.count };
+  }
+
+  res.json({
+    team: { name: req.team.team_name, id: req.team.team_id, score: req.team.score },
+    progress
+  });
+});
+
+// ── GET /api/leaderboard ─────────────────────────────────────────────────────
+router.get('/leaderboard', requireLogin, (req, res) => {
+  const visible = db.prepare("SELECT value FROM settings WHERE key = 'leaderboard_visible'").get();
+  if (visible && visible.value === '0' && req.session.user.role !== 'admin') {
+    return res.status(403).json({ error: 'leaderboard_hidden' });
+  }
+
+  const category = req.query.category;
+
+  let teams;
+  if (category && ['AI', 'CP', 'HEX', 'DEV'].includes(category.toUpperCase())) {
+    // Filter by category
+    teams = db.prepare(`
+      SELECT t.team_name, t.team_id,
+        COALESCE(SUM(s.points_awarded), 0) as score,
+        COUNT(s.id) as questions_solved,
+        COALESCE(MAX(s.solved_at), t.created_at) as last_solve_time
+      FROM teams t
+      LEFT JOIN solved s ON s.team_id = t.id AND s.question_id IN (SELECT id FROM questions WHERE category = ?)
+      WHERE t.banned = 0
+      GROUP BY t.id
+      ORDER BY score DESC, last_solve_time ASC
+    `).all(category.toUpperCase());
+  } else {
+    teams = db.prepare(`
+      SELECT t.team_name, t.team_id, t.score,
+        (SELECT COUNT(*) FROM solved WHERE team_id = t.id) as questions_solved,
+        COALESCE((SELECT MAX(solved_at) FROM solved WHERE team_id = t.id), t.created_at) as last_solve_time
+      FROM teams t
+      WHERE t.banned = 0
+      ORDER BY t.score DESC, last_solve_time ASC
+    `).all();
+  }
+
+  // Add rank and first blood badges
+  const firstBloods = db.prepare(`
+    SELECT question_id, team_id FROM solved 
+    WHERE id IN (SELECT MIN(id) FROM solved GROUP BY question_id)
+  `).all();
+
+  const firstBloodMap = {};
+  for (const fb of firstBloods) {
+    if (!firstBloodMap[fb.team_id]) firstBloodMap[fb.team_id] = 0;
+    firstBloodMap[fb.team_id]++;
+  }
+
+  const result = teams.map((t, i) => ({
+    rank: i + 1,
+    teamName: t.team_name,
+    teamId: t.team_id,
+    score: t.score,
+    questionsSolved: t.questions_solved,
+    lastSolveTime: t.last_solve_time,
+    firstBloods: firstBloodMap[db.prepare('SELECT id FROM teams WHERE team_id = ?').get(t.team_id)?.id] || 0
+  }));
+
+  res.json(result);
+});
+
+// ── GET /api/dashboard — Team dashboard data ─────────────────────────────────
+router.get('/dashboard', requireLogin, requireTeam, (req, res) => {
+  const categories = ['AI', 'CP', 'HEX', 'DEV'];
+  const categoryProgress = {};
+
+  for (const cat of categories) {
+    const questions = db.prepare('SELECT id, title, points FROM questions WHERE category = ? ORDER BY sort_order ASC').all(cat);
+    const solvedMap = {};
+    const solvedRows = db.prepare('SELECT question_id, points_awarded, solved_at FROM solved WHERE team_id = ?').all(req.team.id);
+    for (const s of solvedRows) solvedMap[s.question_id] = s;
+
+    categoryProgress[cat] = questions.map(q => {
+      const s = solvedMap[q.id];
+      const attempts = db.prepare('SELECT COUNT(*) as count FROM submissions WHERE team_id = ? AND question_id = ?').get(req.team.id, q.id);
+      const hintCount = db.prepare('SELECT COUNT(*) as count FROM hint_reveals WHERE team_id = ? AND hint_id IN (SELECT id FROM hints WHERE question_id = ?)').get(req.team.id, q.id);
+      const firstView = db.prepare('SELECT viewed_at FROM question_views WHERE team_id = ? AND question_id = ? ORDER BY viewed_at ASC LIMIT 1').get(req.team.id, q.id);
+
+      return {
+        id: q.id,
+        title: q.title,
+        maxPoints: q.points,
+        solved: !!s,
+        pointsAwarded: s ? s.points_awarded : 0,
+        solvedAt: s ? s.solved_at : null,
+        attempts: attempts.count,
+        hintsUsed: hintCount.count,
+        firstViewedAt: firstView?.viewed_at || null
+      };
+    });
+  }
+
+  res.json({
+    team: { name: req.team.team_name, id: req.team.team_id, score: req.team.score },
+    categoryProgress
+  });
+});
+
+// ── GET /api/announcements ───────────────────────────────────────────────────
+router.get('/announcements', requireLogin, (req, res) => {
+  const anns = db.prepare('SELECT * FROM announcements ORDER BY created_at DESC LIMIT 50').all();
+  res.json(anns);
+});
+
+module.exports = router;

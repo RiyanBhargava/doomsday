@@ -1,0 +1,1433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DOOMSDAY — Mission Control</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <style>
+    body { overflow: hidden; background: #000; }
+    .gameboard-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+    #starfield {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .gameboard-bg {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      object-position: center 40%;
+      z-index: 0;
+    }
+    .globe-container {
+      position: absolute;
+      top: 63%;
+      right: 5%;
+      transform: translateY(-50%);
+      opacity: 0;
+      transition: opacity 1.2s ease;
+      width: min(900px, 90vh, 65vw);
+      height: min(900px, 90vh, 65vw);
+      z-index: 2;
+    }
+    #globe-canvas {
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+    #globe-canvas:active {
+      cursor: grabbing;
+    }
+
+    /* HUD */
+    .gameboard-hud {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 16px 24px;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.5) 70%, transparent 100%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 1.2s ease;
+    }
+    .gameboard-hud > * { pointer-events: all; }
+    .hud-left { display: flex; align-items: center; gap: 20px; }
+    .hud-nav a {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #ccc;
+      margin-right: 14px;
+    }
+    .hud-nav a:hover { color: #00ff41; text-shadow: 0 0 8px rgba(0,255,65,0.5); }
+    .hud-center { text-align: center; }
+    .hud-right { text-align: right; }
+    .hud-team-name {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 14px;
+      color: #ffffff;
+      letter-spacing: 2px;
+    }
+    .hud-logout {
+      background: none;
+      border: none;
+      color: #ccc;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1px;
+      cursor: pointer;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+    .hud-logout:hover { color: #ff0040; }
+
+    /* Question Panel */
+    .question-panel {
+      position: fixed;
+      top: 0; right: -650px;
+      width: 640px;
+      max-width: 95vw;
+      height: 100vh;
+      background: rgba(5,5,5,0.97);
+      border-left: 2px solid #004d00;
+      z-index: 100;
+      overflow-y: auto;
+      transition: right 0.4s cubic-bezier(.22,.61,.36,1);
+      padding: 0;
+      backdrop-filter: blur(10px);
+    }
+    .question-panel.open { right: 0; }
+
+    .panel-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 99;
+      display: none;
+    }
+    .panel-backdrop.open { display: block; }
+
+    .panel-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid #1a1a1a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      background: rgba(5,5,5,0.98);
+      z-index: 2;
+    }
+    .panel-header h2 { font-size: 16px; margin: 0; }
+    .panel-close {
+      background: none;
+      border: none;
+      color: #666;
+      font-size: 24px;
+      cursor: pointer;
+    }
+    .panel-close:hover { color: #00ff41; }
+
+    .panel-body { padding: 20px 24px; }
+
+    .question-detail { display: none; }
+    .question-detail.active { display: block; }
+
+    .question-detail-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .back-to-list {
+      background: none;
+      border: none;
+      color: #666;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 4px;
+    }
+    .back-to-list:hover { color: #00ff41; }
+
+    .attachments-row, .links-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 12px 0;
+    }
+    .attachment-btn, .link-btn {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 9px;
+      padding: 6px 12px;
+      border: 1px solid #333;
+      background: transparent;
+      color: #ccc;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .attachment-btn:hover { border-color: #00ff41; color: #00ff41; }
+    .link-btn { border-color: #004d00; color: #00cc33; }
+    .link-btn:hover { border-color: #00ff41; color: #00ff41; }
+
+
+
+    .answer-section {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid #1a1a1a;
+    }
+    .answer-toggle {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .answer-toggle button {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 9px;
+      padding: 4px 12px;
+      border: 1px solid #333;
+      background: transparent;
+      color: #666;
+      cursor: pointer;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .answer-toggle button.active { border-color: #00ff41; color: #00ff41; }
+
+    .submit-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      align-items: center;
+    }
+    .file-upload-area {
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px dashed #333;
+      text-align: center;
+    }
+    .file-upload-area input[type="file"] { color: #666; font-size: 12px; }
+
+    .attempt-info {
+      font-size: 11px;
+      color: #666;
+      margin-top: 8px;
+    }
+    .prev-submissions {
+      margin-top: 16px;
+      border-top: 1px solid #1a1a1a;
+      padding-top: 12px;
+    }
+    .prev-submission-item {
+      padding: 8px 0;
+      border-bottom: 1px solid #111;
+      font-size: 12px;
+      color: #888;
+    }
+    .prev-submission-item .sub-time { color: #555; font-size: 10px; }
+    .prev-submission-item .sub-value { color: #ccc; margin-top: 4px; word-break: break-all; }
+    .prev-submission-item .sub-files { margin-top: 4px; }
+    .prev-submission-item .sub-files a { color: #00cc33; font-size: 11px; margin-right: 8px; }
+  </style>
+</head>
+<body>
+  <div class="gameboard-container" id="gameboard">
+    <!-- Starfield -->
+    <canvas id="starfield" style="opacity:0;transition:opacity 1.2s ease;"></canvas>
+
+    <!-- Video Background -->
+    <video id="bg-video" class="gameboard-bg" muted playsinline preload="auto">
+      <source src="/images/dr_doom_starting.mp4" type="video/mp4">
+    </video>
+
+    <!-- 3D Globe -->
+    <div class="globe-container" id="globe-container">
+      <canvas id="globe-canvas"></canvas>
+    </div>
+
+    <!-- HUD Overlay -->
+    <div class="gameboard-hud">
+      <div class="hud-left">
+        <a href="/" style="font-family:Orbitron;font-size:16px;font-weight:900;color:#00ff41;text-shadow:0 0 10px rgba(0,255,65,0.5);letter-spacing:3px;text-decoration:none;">DOOMSDAY</a>
+        <div class="hud-nav">
+          <a href="/dashboard.html">Dashboard</a>
+        </div>
+      </div>
+      <div class="hud-center">
+        <div class="countdown-timer" id="countdown" style="font-family:Orbitron;font-size:14px;color:#00ff41;"></div>
+      </div>
+      <div class="hud-right">
+        <div class="hud-team-name" id="team-name">—</div>
+        <button class="hud-logout" onclick="logout()">Logout</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Question Panel (slide from right) -->
+  <div class="panel-backdrop" id="panel-backdrop"></div>
+  <div class="question-panel" id="question-panel">
+    <div class="panel-header">
+      <h2 id="panel-category-title">Category</h2>
+      <button class="panel-close" onclick="closePanel()">&times;</button>
+    </div>
+    <div class="panel-body">
+      <!-- Question List -->
+      <div id="question-list"></div>
+
+      <!-- Question Detail -->
+      <div id="question-detail" class="question-detail">
+        <div class="question-detail-header">
+          <button class="back-to-list" onclick="showQuestionList()">&#8592;</button>
+          <h3 id="detail-title" style="font-size:14px;margin:0;"></h3>
+        </div>
+
+        <div id="detail-body" class="markdown-body"></div>
+
+        <div id="detail-attachments" class="attachments-row"></div>
+        <div id="detail-links" class="links-row"></div>
+        <div id="answer-section" class="answer-section">
+          <h4 style="font-size:12px;color:#00ff41;font-family:Orbitron;letter-spacing:1px;margin-bottom:10px;">SUBMIT ANSWER</h4>
+          <div class="answer-toggle">
+            <button class="active" onclick="setAnswerMode('text', this)">Text</button>
+            <button onclick="setAnswerMode('code', this)">Code</button>
+          </div>
+          <input type="text" class="input-field" id="answer-text-input" placeholder="Enter your answer...">
+          <textarea class="code-editor" id="answer-code-input" placeholder="// Paste or type your answer..." style="display:none;"></textarea>
+          <div class="file-upload-area">
+            <input type="file" id="submission-file" multiple>
+            <div style="color:#555;font-size:10px;margin-top:4px;">Attach files (optional)</div>
+          </div>
+          <div class="submit-row">
+            <button class="btn btn-primary btn-small" onclick="submitAnswer()" id="submit-btn">Submit</button>
+            <div class="spinner" id="submit-spinner" style="display:none;"></div>
+          </div>
+          <div class="attempt-info" id="attempt-info"></div>
+          <div class="prev-submissions" id="prev-submissions"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Announcement Bar -->
+  <div class="announcement-bar" id="announcement-bar"></div>
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+  <!-- Sound Toggle -->
+  <button class="sound-toggle" id="sound-toggle" onclick="toggleSound()" title="Toggle sounds">&#128264;</button>
+
+  <!-- External Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════════════════════
+    // GAMEBOARD CONTROLLER
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    let teamData = null;
+    let progressData = {};
+    let currentCategory = null;
+    let currentQuestionId = null;
+    let soundEnabled = false;
+    const socket = io();
+
+    // ── Audio (Web Audio API) ────────────────────────────────────────────────
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playTone(freq, duration, type = 'sine') {
+      if (!soundEnabled) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.value = 0.1;
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    function playSuccess() { playTone(523, 0.15); setTimeout(() => playTone(659, 0.15), 100); setTimeout(() => playTone(784, 0.3), 200); }
+    function playClick() { playTone(800, 0.05); }
+
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      const btn = document.getElementById('sound-toggle');
+      btn.classList.toggle('active', soundEnabled);
+      btn.innerHTML = soundEnabled ? '&#128266;' : '&#128264;';
+      if (soundEnabled) audioCtx.resume();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 3D INTERACTIVE GLOBE
+    // ═══════════════════════════════════════════════════════════════════════════
+    const globe = {
+      canvas: null, ctx: null, W: 800, H: 800, cx: 400, cy: 400, R: 340,
+      rotX: -0.15, rotY: 0.6, dragging: false, lastM: {x:0,y:0},
+      vel: {x:0, y:0}, hovered: null, lastInt: 0, tStart: null, t0: 0,
+
+      // ── Real-world continent outlines (simplified polygons) ────────────
+      // 4 FILLED continents — one per category
+      cats: [
+        { c:'AI', name:'North America', color:'#00ff41', p:'', pts:[
+          {la:50,lo:-125},{la:54,lo:-130},{la:58,lo:-138},{la:62,lo:-148},
+          {la:64,lo:-160},{la:68,lo:-165},{la:72,lo:-158},{la:72,lo:-140},
+          {la:70,lo:-128},{la:68,lo:-115},{la:65,lo:-100},{la:60,lo:-90},
+          {la:55,lo:-80},{la:50,lo:-68},{la:48,lo:-58},{la:45,lo:-62},
+          {la:42,lo:-68},{la:38,lo:-75},{la:35,lo:-78},{la:32,lo:-80},
+          {la:28,lo:-82},{la:25,lo:-80},{la:24,lo:-85},{la:22,lo:-90},
+          {la:20,lo:-100},{la:22,lo:-108},
+          {la:28,lo:-112},{la:32,lo:-117},{la:35,lo:-120},{la:40,lo:-122},
+          {la:45,lo:-124},{la:48,lo:-124}
+        ]},
+        { c:'CP', name:'Asia', color:'#00ff41', p:'', pts:[
+          {la:42,lo:32},{la:45,lo:38},{la:50,lo:42},{la:55,lo:45},
+          {la:60,lo:48},{la:65,lo:55},{la:68,lo:65},{la:72,lo:75},
+          {la:72,lo:95},{la:72,lo:115},{la:70,lo:130},{la:68,lo:140},
+          {la:62,lo:145},{la:56,lo:148},{la:52,lo:145},{la:48,lo:138},
+          {la:44,lo:130},{la:40,lo:123},{la:35,lo:118},{la:30,lo:112},
+          {la:22,lo:105},{la:15,lo:98},{la:8,lo:94},{la:2,lo:90},
+          {la:6,lo:86},{la:12,lo:84},{la:20,lo:82},{la:28,lo:76},
+          {la:32,lo:68},{la:34,lo:58},{la:35,lo:48},{la:38,lo:40},
+          {la:40,lo:35}
+        ]},
+        { c:'HEX', name:'Australia', color:'#00ff41', p:'', pts:[
+          {la:-12,lo:130},{la:-14,lo:136},{la:-16,lo:140},{la:-18,lo:144},
+          {la:-22,lo:148},{la:-25,lo:152},{la:-28,lo:153},{la:-32,lo:152},
+          {la:-35,lo:148},{la:-38,lo:146},{la:-38,lo:142},{la:-36,lo:138},
+          {la:-34,lo:135},{la:-32,lo:130},{la:-30,lo:125},{la:-28,lo:118},
+          {la:-25,lo:114},{la:-20,lo:114},{la:-16,lo:118},{la:-13,lo:125}
+        ]},
+        { c:'DEV', name:'South America', color:'#00ff41', p:'', pts:[
+          {la:10,lo:-72},{la:8,lo:-68},{la:6,lo:-62},{la:3,lo:-55},
+          {la:0,lo:-50},{la:-2,lo:-48},{la:-5,lo:-42},{la:-7,lo:-36},
+          {la:-10,lo:-35},{la:-14,lo:-38},{la:-18,lo:-40},{la:-22,lo:-42},
+          {la:-26,lo:-45},{la:-30,lo:-48},{la:-34,lo:-52},{la:-38,lo:-58},
+          {la:-42,lo:-62},{la:-48,lo:-68},{la:-52,lo:-72},{la:-55,lo:-68},
+          {la:-52,lo:-76},{la:-45,lo:-76},{la:-38,lo:-74},{la:-30,lo:-72},
+          {la:-22,lo:-70},{la:-15,lo:-76},{la:-8,lo:-78},{la:-2,lo:-80},
+          {la:5,lo:-78},{la:8,lo:-76}
+        ]}
+      ],
+
+      // EMPTY continents + islands — just boundaries, no category
+      bgContinents: [
+        { name:'Europe', pts:[
+          {la:36,lo:-9},{la:38,lo:-5},{la:40,lo:-2},{la:43,lo:-8},{la:46,lo:-2},
+          {la:48,lo:0},{la:50,lo:3},{la:52,lo:5},{la:54,lo:8},{la:56,lo:10},
+          {la:58,lo:8},{la:60,lo:12},{la:62,lo:16},{la:65,lo:20},{la:68,lo:22},
+          {la:70,lo:26},{la:70,lo:30},{la:65,lo:30},{la:60,lo:30},{la:55,lo:28},
+          {la:50,lo:26},{la:48,lo:22},{la:45,lo:18},{la:42,lo:20},{la:40,lo:16},
+          {la:38,lo:12},{la:37,lo:8},{la:36,lo:4},{la:36,lo:0}
+        ]},
+        { name:'Africa', pts:[
+          {la:35,lo:-5},{la:37,lo:4},{la:36,lo:10},{la:33,lo:12},{la:32,lo:22},
+          {la:30,lo:30},{la:25,lo:32},{la:18,lo:38},{la:12,lo:42},{la:8,lo:45},
+          {la:4,lo:40},{la:0,lo:38},{la:-5,lo:36},{la:-8,lo:33},{la:-12,lo:34},
+          {la:-18,lo:36},{la:-22,lo:33},{la:-28,lo:28},{la:-32,lo:26},
+          {la:-34,lo:20},{la:-35,lo:16},{la:-30,lo:14},{la:-24,lo:12},
+          {la:-15,lo:10},{la:-5,lo:8},{la:0,lo:6},{la:5,lo:0},{la:10,lo:-5},
+          {la:15,lo:-18},{la:20,lo:-18},{la:25,lo:-15},{la:30,lo:-10}
+        ]},
+        { name:'Greenland', pts:[
+          {la:60,lo:-45},{la:65,lo:-40},{la:70,lo:-28},{la:75,lo:-22},
+          {la:78,lo:-30},{la:82,lo:-35},{la:82,lo:-48},{la:78,lo:-58},
+          {la:72,lo:-55},{la:68,lo:-52},{la:62,lo:-48}
+        ]},
+        { name:'Antarctica', pts:[
+          {la:-65,lo:-60},{la:-68,lo:-30},{la:-70,lo:0},{la:-68,lo:30},
+          {la:-70,lo:60},{la:-72,lo:90},{la:-70,lo:120},{la:-68,lo:150},
+          {la:-70,lo:170},{la:-72,lo:-170},{la:-70,lo:-140},{la:-68,lo:-110},
+          {la:-65,lo:-90}
+        ]},
+        // Central America
+        { name:'CentralAm', pts:[
+          {la:18,lo:-100},{la:16,lo:-94},{la:14,lo:-90},{la:12,lo:-87},
+          {la:10,lo:-84},{la:8,lo:-80},{la:10,lo:-76},{la:12,lo:-74},
+          {la:14,lo:-78},{la:16,lo:-84},{la:18,lo:-90},{la:19,lo:-96}
+        ]},
+        // Cuba
+        { name:'Cuba', pts:[
+          {la:23,lo:-84},{la:23,lo:-80},{la:22,lo:-77},{la:21,lo:-75},
+          {la:20,lo:-77},{la:21,lo:-82},{la:22,lo:-84}
+        ]},
+        // UK / Britain
+        { name:'UK', pts:[
+          {la:50,lo:-5},{la:52,lo:-3},{la:54,lo:-2},{la:56,lo:-3},
+          {la:58,lo:-4},{la:57,lo:-7},{la:55,lo:-6},{la:53,lo:-4},
+          {la:51,lo:-4}
+        ]},
+        // Ireland
+        { name:'Ireland', pts:[
+          {la:52,lo:-11},{la:53,lo:-9},{la:54,lo:-8},{la:55,lo:-9},
+          {la:54,lo:-11},{la:53,lo:-11}
+        ]},
+        // Iceland
+        { name:'Iceland', pts:[
+          {la:64,lo:-22},{la:65,lo:-18},{la:66,lo:-15},{la:66,lo:-13},
+          {la:65,lo:-14},{la:64,lo:-18},{la:63,lo:-21}
+        ]},
+        // Japan (Honshu) — offshore from Asia
+        { name:'Japan', pts:[
+          {la:34,lo:136},{la:36,lo:138},{la:38,lo:140},{la:40,lo:142},
+          {la:39,lo:140},{la:37,lo:138},{la:35,lo:137},{la:33,lo:134},
+          {la:32,lo:132},{la:33,lo:134}
+        ]},
+        // Japan (Hokkaido)
+        { name:'Hokkaido', pts:[
+          {la:42,lo:141},{la:43,lo:144},{la:44,lo:146},{la:44,lo:144},
+          {la:43,lo:142},{la:42,lo:140}
+        ]},
+        // India — separate from Asia mainland
+        { name:'India', pts:[
+          {la:28,lo:66},{la:26,lo:72},{la:24,lo:76},{la:22,lo:80},
+          {la:18,lo:82},{la:14,lo:79},{la:10,lo:77},{la:8,lo:76},
+          {la:10,lo:74},{la:15,lo:72},{la:20,lo:70},{la:22,lo:68},
+          {la:24,lo:66},{la:26,lo:64}
+        ]},
+        // Arabian Peninsula — separate from both Africa and Asia
+        { name:'Arabia', pts:[
+          {la:30,lo:34},{la:28,lo:38},{la:25,lo:42},{la:22,lo:46},
+          {la:18,lo:50},{la:14,lo:50},{la:13,lo:46},{la:16,lo:43},
+          {la:20,lo:40},{la:24,lo:37},{la:27,lo:35}
+        ]},
+        // Sumatra — south of Asia
+        { name:'Sumatra', pts:[
+          {la:4,lo:96},{la:1,lo:100},{la:-1,lo:102},{la:-4,lo:104},
+          {la:-6,lo:105},{la:-4,lo:102},{la:-1,lo:99},{la:2,lo:96},
+          {la:3,lo:95}
+        ]},
+        // Borneo
+        { name:'Borneo', pts:[
+          {la:5,lo:109},{la:6,lo:114},{la:4,lo:118},{la:1,lo:117},
+          {la:-2,lo:114},{la:-3,lo:110},{la:-1,lo:108},{la:2,lo:108}
+        ]},
+        // Java
+        { name:'Java', pts:[
+          {la:-6,lo:106},{la:-7,lo:108},{la:-8,lo:112},{la:-8,lo:114},
+          {la:-7,lo:113},{la:-7,lo:109},{la:-6,lo:107}
+        ]},
+        // Philippines — separate from Asia
+        { name:'Philippines', pts:[
+          {la:18,lo:120},{la:16,lo:121},{la:14,lo:122},{la:12,lo:123},
+          {la:10,lo:124},{la:8,lo:124},{la:10,lo:122},{la:12,lo:120},
+          {la:14,lo:119},{la:16,lo:119}
+        ]},
+        // New Zealand (North)
+        { name:'NZ_North', pts:[
+          {la:-35,lo:173},{la:-37,lo:175},{la:-39,lo:176},{la:-41,lo:175},
+          {la:-40,lo:173},{la:-38,lo:172},{la:-36,lo:173}
+        ]},
+        // New Zealand (South)
+        { name:'NZ_South', pts:[
+          {la:-42,lo:170},{la:-43,lo:172},{la:-45,lo:170},{la:-47,lo:168},
+          {la:-46,lo:166},{la:-44,lo:167},{la:-42,lo:168}
+        ]},
+        // Madagascar
+        { name:'Madagascar', pts:[
+          {la:-13,lo:48},{la:-15,lo:50},{la:-18,lo:50},{la:-22,lo:48},
+          {la:-25,lo:46},{la:-24,lo:44},{la:-20,lo:44},{la:-16,lo:45},
+          {la:-13,lo:47}
+        ]},
+        // Sri Lanka
+        { name:'SriLanka', pts:[
+          {la:9,lo:80},{la:8,lo:81},{la:6,lo:81},{la:6,lo:80},
+          {la:7,lo:79},{la:9,lo:80}
+        ]},
+        // Papua New Guinea
+        { name:'PapuaNG', pts:[
+          {la:-2,lo:140},{la:-4,lo:144},{la:-6,lo:148},{la:-8,lo:149},
+          {la:-10,lo:150},{la:-9,lo:147},{la:-6,lo:143},{la:-3,lo:141},
+          {la:-1,lo:138}
+        ]},
+        // Taiwan
+        { name:'Taiwan', pts:[
+          {la:25,lo:120},{la:24,lo:121},{la:23,lo:121},{la:22,lo:120},
+          {la:23,lo:119},{la:24,lo:119}
+        ]},
+        // Kamchatka — east of Asia mainland edge
+        { name:'Kamchatka', pts:[
+          {la:54,lo:156},{la:56,lo:158},{la:58,lo:160},{la:60,lo:162},
+          {la:62,lo:164},{la:60,lo:161},{la:58,lo:158},{la:56,lo:156},
+          {la:54,lo:155}
+        ]},
+        // Scandinavia — separate from Europe
+        { name:'Scandinavia', pts:[
+          {la:58,lo:14},{la:60,lo:16},{la:64,lo:16},{la:68,lo:18},
+          {la:70,lo:22},{la:71,lo:26},{la:70,lo:28},{la:68,lo:20},
+          {la:64,lo:14},{la:60,lo:12}
+        ]},
+        // Aleutians
+        { name:'Aleutians', pts:[
+          {la:55,lo:-162},{la:54,lo:-165},{la:52,lo:-170},{la:51,lo:-175},
+          {la:52,lo:-178},{la:53,lo:180},{la:52,lo:175},{la:53,lo:172}
+        ]},
+        // Italy — south of Europe border
+        { name:'Italy', pts:[
+          {la:44,lo:10},{la:43,lo:12},{la:42,lo:14},{la:40,lo:16},
+          {la:38,lo:16},{la:37,lo:15},{la:39,lo:14},{la:41,lo:12},
+          {la:43,lo:10}
+        ]},
+        // Korean peninsula — east of Asia edge
+        { name:'Korea', pts:[
+          {la:38,lo:126},{la:37,lo:128},{la:36,lo:129},{la:35,lo:130},
+          {la:34,lo:129},{la:35,lo:127},{la:37,lo:126}
+        ]}
+      ],
+
+      init(el) {
+        this.canvas = el;
+        this.ctx = el.getContext('2d');
+        this.t0 = Date.now();
+        const d = window.devicePixelRatio || 1;
+        el.width = this.W * d;
+        el.height = this.H * d;
+        this.ctx.scale(d, d);
+        // Pre-compute centroids for category labels
+        for (const m of this.cats) {
+          let sla = 0, slo = 0;
+          for (const p of m.pts) { sla += p.la; slo += p.lo; }
+          m.cLat = sla / m.pts.length;
+          m.cLon = slo / m.pts.length;
+        }
+        el.addEventListener('mousedown', e => {
+          this.dragging = true;
+          this.lastM = { x: e.clientX, y: e.clientY };
+          this.vel = { x:0, y:0 };
+          this.lastInt = Date.now();
+        });
+        el.addEventListener('mousemove', e => this._onMM(e));
+        el.addEventListener('mouseup', () => this.dragging = false);
+        el.addEventListener('mouseleave', () => this.dragging = false);
+        el.addEventListener('click', () => {
+          if (this.hovered) { playClick(); openCategoryPanel(this.hovered.c); }
+        });
+        el.addEventListener('touchstart', e => this._onTS(e), { passive: false });
+        el.addEventListener('touchmove', e => this._onTM(e), { passive: false });
+        el.addEventListener('touchend', e => this._onTE(e));
+        this._loop();
+      },
+
+      // ── 3D Math ──────────────────────────────────────────────────────────
+      _ll3d(lat, lon) {
+        const p = lat * Math.PI / 180, t = lon * Math.PI / 180;
+        return {
+          x: this.R * Math.cos(p) * Math.sin(t),
+          y: -this.R * Math.sin(p),
+          z: this.R * Math.cos(p) * Math.cos(t)
+        };
+      },
+      _rot(x, y, z) {
+        const cY = Math.cos(this.rotY), sY = Math.sin(this.rotY);
+        const x1 = x*cY + z*sY, z1 = -x*sY + z*cY;
+        const cX = Math.cos(this.rotX), sX = Math.sin(this.rotX);
+        return { x: x1, y: y*cX - z1*sX, z: y*sX + z1*cX };
+      },
+      _proj(lat, lon) {
+        const p = this._ll3d(lat, lon);
+        const r = this._rot(p.x, p.y, p.z);
+        return { sx: this.cx + r.x, sy: this.cy + r.y, sz: r.z };
+      },
+      _mpos(e) {
+        const rc = this.canvas.getBoundingClientRect();
+        return { x: (e.clientX - rc.left) * (this.W / rc.width), y: (e.clientY - rc.top) * (this.H / rc.height) };
+      },
+
+      // ── Hit test: is point inside projected continent polygon? ─────────
+      _hitContinent(mx, my, m) {
+        if (!m._poly || m._poly.length < 3) return false;
+        let inside = false;
+        const pts = m._poly;
+        for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+          const xi = pts[i].x, yi = pts[i].y, xj = pts[j].x, yj = pts[j].y;
+          if (((yi > my) !== (yj > my)) && (mx < (xj - xi) * (my - yi) / (yj - yi) + xi))
+            inside = !inside;
+        }
+        return inside;
+      },
+
+      // ── Events ───────────────────────────────────────────────────────────
+      _onMM(e) {
+        if (this.dragging) {
+          const dx = e.clientX - this.lastM.x, dy = e.clientY - this.lastM.y;
+          this.rotY += dx * 0.005;
+          this.rotX = Math.max(-1.2, Math.min(1.2, this.rotX + dy * 0.005));
+          this.vel = { x: dx * 0.005, y: dy * 0.005 };
+          this.lastM = { x: e.clientX, y: e.clientY };
+          this.lastInt = Date.now();
+        } else {
+          const pos = this._mpos(e);
+          this.hovered = null;
+          for (const m of this.cats) {
+            if (!m._v) continue;
+            if (this._hitContinent(pos.x, pos.y, m)) { this.hovered = m; break; }
+          }
+          this.canvas.style.cursor = this.hovered ? 'pointer' : 'grab';
+        }
+      },
+      _onTS(e) {
+        if (e.touches.length !== 1) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        this.dragging = true;
+        this.tStart = { x: t.clientX, y: t.clientY };
+        this.lastM = { x: t.clientX, y: t.clientY };
+        this.vel = { x:0, y:0 };
+        this.lastInt = Date.now();
+      },
+      _onTM(e) {
+        if (!this.dragging || e.touches.length !== 1) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        const dx = t.clientX - this.lastM.x, dy = t.clientY - this.lastM.y;
+        this.rotY += dx * 0.005;
+        this.rotX = Math.max(-1.2, Math.min(1.2, this.rotX + dy * 0.005));
+        this.vel = { x: dx * 0.005, y: dy * 0.005 };
+        this.lastM = { x: t.clientX, y: t.clientY };
+        this.lastInt = Date.now();
+      },
+      _onTE(e) {
+        this.dragging = false;
+        if (this.tStart && e.changedTouches[0]) {
+          const t = e.changedTouches[0];
+          if (Math.abs(t.clientX - this.tStart.x) < 10 && Math.abs(t.clientY - this.tStart.y) < 10) {
+            const pos = this._mpos(t);
+            for (const m of this.cats) {
+              if (!m._v) continue;
+              if (this._hitContinent(pos.x, pos.y, m)) {
+                playClick(); openCategoryPanel(m.c); break;
+              }
+            }
+          }
+        }
+        this.tStart = null;
+      },
+
+      setProgress(cat, submitted, total) {
+        const m = this.cats.find(c => c.c === cat);
+        if (m) m.p = total > 0 ? submitted + '/' + total : '';
+      },
+
+      // ── Drawing helpers ──────────────────────────────────────────────────
+      _drawContourPath(pts, close) {
+        const c = this.ctx;
+        const projected = pts.map(pt => this._proj(pt.la, pt.lo));
+        const vis = projected.filter(p => p.sz > -20);
+        if (vis.length < 3) return { projected, vis: false, avgA: 0 };
+        const visFront = projected.filter(p => p.sz > 0);
+        if (visFront.length < 2) return { projected, vis: false, avgA: 0 };
+        const avgZ = visFront.reduce((s, p) => s + p.sz, 0) / visFront.length;
+        const a = Math.min(1, avgZ / (this.R * 0.35));
+        c.beginPath();
+        let started = false;
+        for (const p of projected) {
+          if (p.sz > -20) {
+            if (!started) { c.moveTo(p.sx, p.sy); started = true; }
+            else c.lineTo(p.sx, p.sy);
+          }
+        }
+        if (close) c.closePath();
+        return { projected, vis: true, avgA: a };
+      },
+
+      // ── Atmosphere glow ──────────────────────────────────────────────────
+      _drawAtmo() {
+        const c = this.ctx;
+        // Outer atmospheric glow
+        const g = c.createRadialGradient(this.cx, this.cy, this.R * 0.95, this.cx, this.cy, this.R * 1.25);
+        g.addColorStop(0, 'rgba(0,255,65,0.06)');
+        g.addColorStop(0.3, 'rgba(0,255,65,0.03)');
+        g.addColorStop(0.7, 'rgba(0,255,65,0.008)');
+        g.addColorStop(1, 'transparent');
+        c.fillStyle = g;
+        c.beginPath();
+        c.arc(this.cx, this.cy, this.R * 1.25, 0, Math.PI * 2);
+        c.fill();
+      },
+
+      // ── 3D Sphere with proper shading ────────────────────────────────────
+      _drawSphere() {
+        const c = this.ctx;
+        const R = this.R;
+
+        // 1. Shadow beneath the sphere (for depth)
+        const shG = c.createRadialGradient(
+          this.cx + 8, this.cy + R * 0.85, R * 0.2,
+          this.cx + 8, this.cy + R * 0.85, R * 0.7
+        );
+        shG.addColorStop(0, 'rgba(0,0,0,0.25)');
+        shG.addColorStop(1, 'transparent');
+        c.fillStyle = shG;
+        c.beginPath();
+        c.ellipse(this.cx + 8, this.cy + R * 0.85, R * 0.7, R * 0.18, 0, 0, Math.PI * 2);
+        c.fill();
+
+        // 2. Base sphere — dark ocean with 3D gradient lighting
+        // Light from upper-left
+        const lx = this.cx - R * 0.35;
+        const ly = this.cy - R * 0.35;
+        const g = c.createRadialGradient(lx, ly, R * 0.01, this.cx, this.cy, R);
+        g.addColorStop(0, '#182a18');    // Bright highlight area
+        g.addColorStop(0.2, '#122012');  // Mid-light
+        g.addColorStop(0.5, '#0a160a'); // Mid tone
+        g.addColorStop(0.8, '#060e06');  // Dark
+        g.addColorStop(0.95, '#030603'); // Very dark edges
+        g.addColorStop(1, '#010201');    // Limb darkening
+        c.beginPath();
+        c.arc(this.cx, this.cy, R, 0, Math.PI * 2);
+        c.fillStyle = g;
+        c.fill();
+
+        // 3. Specular highlight — bright glossy spot (makes it look shiny/3D)
+        const sg = c.createRadialGradient(lx, ly, 0, lx, ly, R * 0.45);
+        sg.addColorStop(0, 'rgba(140,220,160,0.10)');
+        sg.addColorStop(0.15, 'rgba(80,180,100,0.06)');
+        sg.addColorStop(0.5, 'rgba(30,120,50,0.02)');
+        sg.addColorStop(1, 'transparent');
+        c.fillStyle = sg;
+        c.beginPath();
+        c.arc(this.cx, this.cy, R, 0, Math.PI * 2);
+        c.fill();
+
+        // 4. Rim/limb darkening — edges go dark for spherical look
+        const rg = c.createRadialGradient(this.cx, this.cy, R * 0.65, this.cx, this.cy, R);
+        rg.addColorStop(0, 'transparent');
+        rg.addColorStop(0.5, 'rgba(0,0,0,0.15)');
+        rg.addColorStop(0.85, 'rgba(0,0,0,0.45)');
+        rg.addColorStop(1, 'rgba(0,0,0,0.7)');
+        c.fillStyle = rg;
+        c.beginPath();
+        c.arc(this.cx, this.cy, R, 0, Math.PI * 2);
+        c.fill();
+
+        // 5. Subtle green rim light from right side (Doom energy feel)
+        const rlg = c.createRadialGradient(
+          this.cx + R * 0.6, this.cy + R * 0.1, R * 0.5,
+          this.cx, this.cy, R * 1.02
+        );
+        rlg.addColorStop(0, 'transparent');
+        rlg.addColorStop(0.7, 'transparent');
+        rlg.addColorStop(0.92, 'rgba(0,255,65,0.04)');
+        rlg.addColorStop(1, 'rgba(0,255,65,0.08)');
+        c.fillStyle = rlg;
+        c.beginPath();
+        c.arc(this.cx, this.cy, R, 0, Math.PI * 2);
+        c.fill();
+
+        // NO hard outline stroke — that kills the 3D illusion
+      },
+
+      // ── Grid lines (subtle) ──────────────────────────────────────────────
+      _drawGrid() {
+        const c = this.ctx, N = 100;
+        c.save();
+        c.beginPath();
+        c.arc(this.cx, this.cy, this.R - 1, 0, Math.PI * 2);
+        c.clip();
+        // Latitude lines
+        for (let lat = -60; lat <= 60; lat += 30) {
+          c.strokeStyle = lat === 0 ? 'rgba(0,255,65,0.10)' : 'rgba(0,255,65,0.03)';
+          c.lineWidth = lat === 0 ? 0.6 : 0.3;
+          c.beginPath();
+          let on = false;
+          for (let i = 0; i <= N; i++) {
+            const p = this._proj(lat, i * 360 / N - 180);
+            if (p.sz > 0) { if (!on) { c.moveTo(p.sx, p.sy); on = true; } else c.lineTo(p.sx, p.sy); }
+            else on = false;
+          }
+          c.stroke();
+        }
+        // Longitude lines
+        for (let lon = -180; lon < 180; lon += 30) {
+          c.strokeStyle = lon === 0 ? 'rgba(0,255,65,0.10)' : 'rgba(0,255,65,0.03)';
+          c.lineWidth = lon === 0 ? 0.6 : 0.3;
+          c.beginPath();
+          let on = false;
+          for (let i = 0; i <= N; i++) {
+            const p = this._proj(i * 180 / N - 90, lon);
+            if (p.sz > 0) { if (!on) { c.moveTo(p.sx, p.sy); on = true; } else c.lineTo(p.sx, p.sy); }
+            else on = false;
+          }
+          c.stroke();
+        }
+        c.restore();
+      },
+
+      // ── Draw ALL continents ──────────────────────────────────────────────
+      _drawContinents() {
+        const c = this.ctx;
+        const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.003);
+        c.save();
+        c.beginPath();
+        c.arc(this.cx, this.cy, this.R - 1, 0, Math.PI * 2);
+        c.clip();
+
+        // --- Empty continents (boundaries only) ---
+        for (const bg of this.bgContinents) {
+          const res = this._drawContourPath(bg.pts, true);
+          if (!res.vis) continue;
+          const a = res.avgA;
+          // Visible boundary — no fill
+          c.strokeStyle = 'rgba(0,255,65,' + (a * 0.45) + ')';
+          c.lineWidth = 1.8;
+          c.stroke();
+        }
+
+        // --- Filled category continents ---
+        for (const m of this.cats) {
+          const projected = m.pts.map(pt => this._proj(pt.la, pt.lo));
+          const visPts = projected.filter(p => p.sz > 0);
+          m._v = visPts.length >= 3;
+          m._poly = projected.filter(p => p.sz > -20).map(p => ({x: p.sx, y: p.sy}));
+          if (!m._v) continue;
+
+          const avgZ = visPts.reduce((s, p) => s + p.sz, 0) / visPts.length;
+          const a = Math.min(1, avgZ / (this.R * 0.35));
+          const hov = this.hovered === m;
+
+          // Draw continent shape
+          c.beginPath();
+          let started = false;
+          for (const p of projected) {
+            if (p.sz > -20) {
+              if (!started) { c.moveTo(p.sx, p.sy); started = true; }
+              else c.lineTo(p.sx, p.sy);
+            }
+          }
+          c.closePath();
+
+          if (hov) {
+            // Bright glowing fill on hover
+            c.fillStyle = 'rgba(0,255,65,' + (a * 0.4) + ')';
+            c.shadowColor = '#00ff41';
+            c.shadowBlur = 40;
+            c.fill();
+            c.shadowBlur = 0;
+            // Bright border
+            c.strokeStyle = 'rgba(0,255,65,' + (a * 0.95) + ')';
+            c.lineWidth = 3.0;
+            c.shadowColor = '#00ff41';
+            c.shadowBlur = 22;
+            c.stroke();
+            c.shadowBlur = 0;
+          } else {
+            // Subtle green fill
+            c.fillStyle = 'rgba(0,255,65,' + (a * (0.14 + 0.05 * pulse)) + ')';
+            c.fill();
+            // Continent border
+            c.strokeStyle = 'rgba(0,255,65,' + (a * 0.6) + ')';
+            c.lineWidth = 2.0;
+            c.stroke();
+          }
+
+          // Label at centroid
+          const cp = this._proj(m.cLat, m.cLon);
+          if (cp.sz > 10) {
+            const la = Math.min(1, cp.sz / (this.R * 0.35));
+            const fs = Math.round((hov ? 28 : 22) * Math.max(0.6, la));
+            c.font = '900 ' + fs + 'px Orbitron, sans-serif';
+            c.textAlign = 'center';
+            c.textBaseline = 'middle';
+            // Text shadow for depth
+            c.fillStyle = 'rgba(0,0,0,' + (la * 0.6) + ')';
+            c.fillText(m.c, cp.sx + 1, cp.sy - (m.p ? 7 : 0) + 1);
+            // Main label
+            c.fillStyle = 'rgba(0,255,65,' + la + ')';
+            if (hov) { c.shadowColor = '#00ff41'; c.shadowBlur = 18; }
+            c.fillText(m.c, cp.sx, cp.sy - (m.p ? 8 : 0));
+            c.shadowBlur = 0;
+            // Progress below label
+            if (m.p) {
+              c.font = Math.round(14 * Math.max(0.6, la)) + 'px Orbitron, sans-serif';
+              c.fillStyle = 'rgba(0,200,50,' + (la * 0.7) + ')';
+              c.fillText(m.p, cp.sx, cp.sy + 14);
+            }
+          }
+        }
+        c.restore();
+      },
+
+      _drawHint() {
+        const elapsed = Date.now() - this.t0;
+        if (elapsed > 6000) return;
+        const fade = elapsed < 1500 ? elapsed / 1500 : Math.max(0, 1 - (elapsed - 2000) / 3000);
+        if (fade <= 0) return;
+        const c = this.ctx;
+        c.font = '11px Orbitron, sans-serif';
+        c.textAlign = 'center';
+        c.fillStyle = 'rgba(0,255,65,' + (fade * 0.6) + ')';
+        c.letterSpacing = '3px';
+        c.fillText('DRAG TO EXPLORE', this.cx, this.cy + this.R + 30);
+      },
+
+      render() {
+        this.ctx.clearRect(0, 0, this.W, this.H);
+        this._drawAtmo();
+        this._drawSphere();
+        this._drawGrid();
+        this._drawContinents();
+        this._drawHint();
+      },
+
+      _loop() {
+        if (!this.dragging) {
+          if (Math.abs(this.vel.x) > 0.0001 || Math.abs(this.vel.y) > 0.0001) {
+            this.rotY += this.vel.x;
+            this.rotX = Math.max(-1.2, Math.min(1.2, this.rotX + this.vel.y));
+            this.vel.x *= 0.96;
+            this.vel.y *= 0.96;
+          } else if (Date.now() - this.lastInt > 2500) {
+            this.rotY += 0.0015;
+          }
+        }
+        this.render();
+        requestAnimationFrame(() => this._loop());
+      }
+    };
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    async function init() {
+      const res = await fetch('/auth/me');
+      const data = await res.json();
+
+      if (!data.loggedIn) { window.location.href = '/'; return; }
+      if (data.user.role === 'admin') { window.location.href = '/admin.html'; return; }
+      if (!data.hasTeam) { window.location.href = '/'; return; }
+      if (data.banned) { window.location.href = '/banned.html'; return; }
+
+      teamData = data.team;
+      document.getElementById('team-name').textContent = data.team.team_name;
+
+      await loadProgress();
+      startCountdown();
+
+      // Initialize globe but don't show yet
+      globe.init(document.getElementById('globe-canvas'));
+
+      // Start video sequence
+      startVideoSequence();
+    }
+
+    // ── Video Background Sequence ─────────────────────────────────────────────
+    function startVideoSequence() {
+      const video = document.getElementById('bg-video');
+      video.muted = true;
+      video.volume = 0;
+
+      // Phase 1: Play starting video
+      video.play().catch(() => {
+        // Autoplay blocked — show globe immediately as fallback
+        showGlobeAndMiddleVideo();
+      });
+
+      video.addEventListener('ended', function onStartEnd() {
+        video.removeEventListener('ended', onStartEnd);
+        // Phase 2: Starting video done → show globe, switch to middle video
+        showGlobeAndMiddleVideo();
+      });
+    }
+
+    function showGlobeAndMiddleVideo() {
+      const video = document.getElementById('bg-video');
+      const globeEl = document.getElementById('globe-container');
+      const hudEl = document.querySelector('.gameboard-hud');
+      const starfieldEl = document.getElementById('starfield');
+
+      // Fade in globe, HUD, starfield
+      globeEl.style.opacity = '1';
+      hudEl.style.opacity = '1';
+      starfieldEl.style.opacity = '1';
+
+      // Switch video source to middle video (play once, freeze on last frame)
+      video.src = '/images/dr_doom_middle.mp4';
+      video.muted = true;
+      video.volume = 0;
+      video.loop = false;
+      video.load();
+      video.play().catch(() => {});
+    }
+
+    // ── Load Progress ─────────────────────────────────────────────────────────
+    async function loadProgress() {
+      try {
+        const res = await fetch('/api/progress');
+        const data = await res.json();
+        progressData = data.progress;
+
+        for (const cat of ['AI', 'CP', 'HEX', 'DEV']) {
+          const p = progressData[cat] || { total: 0, submitted: 0 };
+          globe.setProgress(cat, p.submitted, p.total);
+        }
+      } catch (e) {
+        console.error('Failed to load progress:', e);
+      }
+    }
+
+    // ── Countdown Timer ───────────────────────────────────────────────────────
+    function startCountdown() {
+      fetch('/api/competition-info').then(r => r.json()).then(data => {
+        if (!data.end) {
+          document.getElementById('countdown').textContent = '';
+          return;
+        }
+        const endTime = new Date(data.end).getTime();
+
+        function tick() {
+          const now = Date.now();
+          const diff = Math.max(0, endTime - now);
+          const h = String(Math.floor(diff / 3600000)).padStart(2, '0');
+          const m = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
+          const s = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
+          document.getElementById('countdown').textContent = `${h}:${m}:${s}`;
+          if (diff > 0) requestAnimationFrame(tick);
+          else document.getElementById('countdown').textContent = 'TIME UP';
+        }
+        tick();
+      });
+    }
+
+    // Region clicks handled by 3D globe
+
+    // ── Category Panel ────────────────────────────────────────────────────────
+    async function openCategoryPanel(category) {
+      currentCategory = category;
+      document.getElementById('panel-category-title').textContent = category + ' — Questions';
+      document.getElementById('question-panel').classList.add('open');
+      document.getElementById('panel-backdrop').classList.add('open');
+      document.getElementById('question-list').style.display = 'block';
+      document.getElementById('question-detail').classList.remove('active');
+
+      try {
+        const res = await fetch(`/api/questions/${category}`);
+        if (!res.ok) throw new Error('Failed');
+        const questions = await res.json();
+        renderQuestionList(questions);
+      } catch (e) {
+        document.getElementById('question-list').innerHTML = '<p style="color:#ff0040;">Failed to load questions.</p>';
+      }
+    }
+
+    function closePanel() {
+      document.getElementById('question-panel').classList.remove('open');
+      document.getElementById('panel-backdrop').classList.remove('open');
+      currentCategory = null;
+      currentQuestionId = null;
+    }
+
+    document.getElementById('panel-backdrop').addEventListener('click', closePanel);
+
+    function showQuestionList() {
+      document.getElementById('question-list').style.display = 'block';
+      document.getElementById('question-detail').classList.remove('active');
+      if (currentCategory) openCategoryPanel(currentCategory);
+    }
+
+    function renderQuestionList(questions) {
+      const container = document.getElementById('question-list');
+      container.innerHTML = '';
+
+      questions.forEach((q, i) => {
+        const div = document.createElement('div');
+        div.className = 'question-item' + (q.submitted ? ' solved' : '') + (!q.unlocked ? ' locked' : '');
+        div.innerHTML = `
+          <div class="question-status ${q.submitted ? 'solved' : ''} ${!q.unlocked ? 'locked' : ''}"></div>
+          <span class="question-title">${i + 1}. ${q.title}</span>
+          ${q.submitted ? '<span style="color:#00cc33;font-size:10px;font-family:Orbitron;">SUBMITTED</span>' : ''}
+        `;
+        if (q.unlocked) {
+          div.addEventListener('click', () => openQuestion(q.id));
+        }
+        container.appendChild(div);
+      });
+    }
+
+    // ── Question Detail ───────────────────────────────────────────────────────
+    async function openQuestion(questionId) {
+      currentQuestionId = questionId;
+      document.getElementById('question-list').style.display = 'none';
+      document.getElementById('question-detail').classList.add('active');
+
+      try {
+        const res = await fetch(`/api/question/${questionId}`);
+        if (!res.ok) throw new Error('Failed');
+        const q = await res.json();
+        renderQuestionDetail(q);
+      } catch (e) {
+        showToast('Failed to load question', 'error');
+      }
+    }
+
+    function renderQuestionDetail(q) {
+      document.getElementById('detail-title').textContent = q.title;
+
+      // Render markdown body
+      document.getElementById('detail-body').innerHTML = renderMarkdown(q.body_markdown);
+      document.querySelectorAll('#detail-body pre code').forEach(block => hljs.highlightElement(block));
+
+      // Attachments
+      const attContainer = document.getElementById('detail-attachments');
+      attContainer.innerHTML = '';
+      (q.attachments || []).forEach(a => {
+        const link = document.createElement('a');
+        link.className = 'attachment-btn';
+        link.href = '/' + a.filepath;
+        link.download = a.filename;
+        link.innerHTML = `&#128196; ${a.filename}`;
+        attContainer.appendChild(link);
+      });
+
+      // Reference links
+      const linksContainer = document.getElementById('detail-links');
+      linksContainer.innerHTML = '';
+      (q.links || []).forEach(l => {
+        const link = document.createElement('a');
+        link.className = 'link-btn';
+        link.href = l.url;
+        link.target = '_blank';
+        link.innerHTML = `&#128279; ${l.label}`;
+        linksContainer.appendChild(link);
+      });
+
+      // Clear inputs
+      document.getElementById('answer-text-input').value = '';
+      document.getElementById('answer-code-input').value = '';
+      document.getElementById('submission-file').value = '';
+
+      // Attempt info
+      document.getElementById('attempt-info').textContent = q.submissions_count > 0
+        ? `${q.submissions_count} submission(s)` : '';
+
+      // Previous submissions
+      renderPreviousSubmissions(q.previous_submissions || []);
+    }
+
+    function renderPreviousSubmissions(submissions) {
+      const container = document.getElementById('prev-submissions');
+      if (!submissions || submissions.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+      container.innerHTML = '<h4 style="font-size:11px;color:#666;font-family:Orbitron;letter-spacing:1px;margin-bottom:8px;">PREVIOUS SUBMISSIONS</h4>';
+      submissions.forEach(s => {
+        const div = document.createElement('div');
+        div.className = 'prev-submission-item';
+        const time = new Date(s.submitted_at).toLocaleString();
+        div.innerHTML = `
+          <div class="sub-time">${time}</div>
+          ${s.submitted_value ? `<div class="sub-value">${escapeHtml(s.submitted_value)}</div>` : ''}
+          ${s.files && s.files.length > 0 ? `<div class="sub-files">${s.files.map(f => `<a href="/${f.filepath}" download="${f.filename}">&#128206; ${f.filename}</a>`).join(' ')}</div>` : ''}
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    // ── Markdown Rendering ────────────────────────────────────────────────────
+    function renderMarkdown(md) {
+      if (!md) return '';
+      let text = md;
+      text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
+        try { return '<div class="katex-block">' + katex.renderToString(math, { displayMode: true }) + '</div>'; }
+        catch (e) { return '$$' + math + '$$'; }
+      });
+      text = text.replace(/\$([^\$\n]+?)\$/g, (_, math) => {
+        try { return katex.renderToString(math, { displayMode: false }); }
+        catch (e) { return '$' + math + '$'; }
+      });
+      return marked.parse(text);
+    }
+
+    // ── Answer Mode Toggle ────────────────────────────────────────────────────
+    function setAnswerMode(mode, btn) {
+      document.querySelectorAll('.answer-toggle button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('answer-text-input').style.display = mode === 'text' ? 'block' : 'none';
+      document.getElementById('answer-code-input').style.display = mode === 'code' ? 'block' : 'none';
+    }
+
+    // ── Submit Answer ─────────────────────────────────────────────────────────
+    async function submitAnswer() {
+      const textInput = document.getElementById('answer-text-input');
+      const codeInput = document.getElementById('answer-code-input');
+      const answer = textInput.style.display !== 'none' ? textInput.value : codeInput.value;
+      const fileInput = document.getElementById('submission-file');
+
+      if (!answer.trim() && fileInput.files.length === 0) {
+        showToast('Enter an answer or attach a file', 'warning');
+        return;
+      }
+
+      const spinner = document.getElementById('submit-spinner');
+      const submitBtn = document.getElementById('submit-btn');
+      submitBtn.disabled = true;
+      spinner.style.display = 'inline-block';
+
+      try {
+        const formData = new FormData();
+        formData.append('answer', answer.trim());
+        for (const file of fileInput.files) {
+          formData.append('files', file);
+        }
+
+        const res = await fetch(`/api/submit/${currentQuestionId}`, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          playSuccess();
+          showToast('Submission saved!', 'success');
+          await loadProgress();
+          openQuestion(currentQuestionId); // refresh to show new submission
+        } else {
+          showToast(data.error || 'Submission failed', 'error');
+        }
+      } catch (e) {
+        showToast('Submission failed', 'error');
+      } finally {
+        submitBtn.disabled = false;
+        spinner.style.display = 'none';
+      }
+    }
+
+    // ── Toast ─────────────────────────────────────────────────────────────────
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast' + (type === 'error' ? ' toast-error' : type === 'warning' ? ' toast-warning' : '');
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    // ── Logout ────────────────────────────────────────────────────────────────
+    async function logout() {
+      await fetch('/auth/logout', { method: 'POST' });
+      window.location.href = '/';
+    }
+
+    // ── Socket.io Events ──────────────────────────────────────────────────────
+    socket.on('announcement', (msg) => {
+      const bar = document.getElementById('announcement-bar');
+      bar.textContent = msg;
+      bar.classList.add('active');
+      showToast(msg, 'warning');
+    });
+
+    socket.on('maintenance', () => {
+      showToast('Competition is under maintenance', 'warning');
+    });
+
+    // ── Starfield ──────────────────────────────────────────────────────────────
+    (function initStarfield() {
+      const sc = document.getElementById('starfield');
+      const sctx = sc.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      let sw, sh, stars = [], shooters = [];
+
+      function resize() {
+        sw = window.innerWidth; sh = window.innerHeight;
+        sc.width = sw * dpr; sc.height = sh * dpr;
+        sctx.scale(dpr, dpr);
+      }
+      resize();
+      window.addEventListener('resize', () => { sctx.setTransform(1,0,0,1,0,0); resize(); });
+
+      // Create stars with depth layers
+      for (let i = 0; i < 280; i++) {
+        stars.push({
+          x: Math.random() * sw, y: Math.random() * sh,
+          r: Math.random() * 1.8 + 0.3,
+          speed: Math.random() * 0.3 + 0.05,
+          twinkle: Math.random() * Math.PI * 2,
+          twinkleSpeed: Math.random() * 0.03 + 0.01,
+          brightness: Math.random() * 0.6 + 0.4
+        });
+      }
+
+      function spawnShooter() {
+        shooters.push({
+          x: Math.random() * sw, y: Math.random() * sh * 0.4,
+          vx: (Math.random() - 0.3) * 6, vy: Math.random() * 3 + 2,
+          life: 1, decay: Math.random() * 0.015 + 0.008,
+          len: Math.random() * 60 + 40
+        });
+      }
+
+      function drawStarfield() {
+        sctx.clearRect(0, 0, sw, sh);
+
+        // Background stars
+        for (const s of stars) {
+          s.twinkle += s.twinkleSpeed;
+          const a = s.brightness * (0.6 + 0.4 * Math.sin(s.twinkle));
+          sctx.beginPath();
+          sctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          sctx.fillStyle = `rgba(255,255,255,${a})`;
+          sctx.fill();
+
+          // Slow drift
+          s.y += s.speed;
+          if (s.y > sh + 2) { s.y = -2; s.x = Math.random() * sw; }
+        }
+
+        // Shooting stars
+        if (Math.random() < 0.008) spawnShooter();
+        for (let i = shooters.length - 1; i >= 0; i--) {
+          const ss = shooters[i];
+          sctx.save();
+          const grad = sctx.createLinearGradient(
+            ss.x, ss.y, ss.x - ss.vx * ss.len / 6, ss.y - ss.vy * ss.len / 6
+          );
+          grad.addColorStop(0, `rgba(0,255,65,${ss.life * 0.8})`);
+          grad.addColorStop(1, 'transparent');
+          sctx.strokeStyle = grad;
+          sctx.lineWidth = 1.5;
+          sctx.beginPath();
+          sctx.moveTo(ss.x, ss.y);
+          sctx.lineTo(ss.x - ss.vx * ss.len / 6, ss.y - ss.vy * ss.len / 6);
+          sctx.stroke();
+          sctx.restore();
+
+          ss.x += ss.vx; ss.y += ss.vy; ss.life -= ss.decay;
+          if (ss.life <= 0) shooters.splice(i, 1);
+        }
+
+        requestAnimationFrame(drawStarfield);
+      }
+      drawStarfield();
+    })();
+
+    // ── Start ─────────────────────────────────────────────────────────────────
+    init();
+  </script>
+</body>
+</html>
