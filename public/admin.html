@@ -185,13 +185,6 @@
                   </select>
                 </div>
                 <div class="form-group">
-                  <label>Unlock Mode</label>
-                  <select class="input-field" id="q-unlock-mode">
-                    <option value="sequential">Sequential</option>
-                    <option value="immediate">Immediate</option>
-                  </select>
-                </div>
-                <div class="form-group">
                   <label>Sort Order</label>
                   <input type="number" class="input-field" id="q-sort-order" value="0">
                 </div>
@@ -514,7 +507,6 @@
       document.getElementById('q-title').value = question ? question.title : '';
       document.getElementById('q-category').value = question ? question.category : 'AI';
       document.getElementById('q-answer').value = question ? (question.answer || '') : '';
-      document.getElementById('q-unlock-mode').value = question ? question.unlock_mode : 'sequential';
       document.getElementById('q-sort-order').value = question ? question.sort_order : 0;
       document.getElementById('q-visible-from').value = question && question.visible_from ? question.visible_from.slice(0, 16) : '';
       document.getElementById('q-body').value = question ? question.body_markdown : '';
@@ -564,8 +556,6 @@
         body_markdown: document.getElementById('q-body').value,
         answer: document.getElementById('q-answer').value || '',
         answer_mode: 'exact',
-        points: 0,
-        unlock_mode: document.getElementById('q-unlock-mode').value,
         sort_order: parseInt(document.getElementById('q-sort-order').value) || 0,
         visible_from: document.getElementById('q-visible-from').value || null,
         links: getLinks()

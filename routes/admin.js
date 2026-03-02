@@ -45,12 +45,12 @@ router.get('/question/:id', (req, res) => {
 
 // POST /admin/question — Create question
 router.post('/question', (req, res) => {
-  const { title, category, body_markdown, answer, answer_mode, points, unlock_mode, sort_order, visible_from, links } = req.body;
+  const { title, category, body_markdown, answer, answer_mode, sort_order, visible_from, links } = req.body;
 
   const result = db.prepare(`
-    INSERT INTO questions (title, category, body_markdown, answer, answer_mode, points, unlock_mode, sort_order, visible_from)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(title, category, body_markdown, answer || '', answer_mode || 'exact', points || 0, unlock_mode || 'sequential', sort_order || 0, visible_from || null);
+    INSERT INTO questions (title, category, body_markdown, answer, answer_mode, sort_order, visible_from)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(title, category, body_markdown, answer || '', answer_mode || 'exact', sort_order || 0, visible_from || null);
 
   const questionId = result.lastInsertRowid;
 
@@ -65,12 +65,12 @@ router.post('/question', (req, res) => {
 
 // PUT /admin/question/:id — Update question
 router.put('/question/:id', (req, res) => {
-  const { title, category, body_markdown, answer, answer_mode, points, unlock_mode, sort_order, visible_from, links } = req.body;
+  const { title, category, body_markdown, answer, answer_mode, sort_order, visible_from, links } = req.body;
 
   db.prepare(`
-    UPDATE questions SET title=?, category=?, body_markdown=?, answer=?, answer_mode=?, points=?, unlock_mode=?, sort_order=?, visible_from=?, updated_at=CURRENT_TIMESTAMP
+    UPDATE questions SET title=?, category=?, body_markdown=?, answer=?, answer_mode=?, sort_order=?, visible_from=?, updated_at=CURRENT_TIMESTAMP
     WHERE id=?
-  `).run(title, category, body_markdown, answer, answer_mode, points, unlock_mode, sort_order, visible_from || null, req.params.id);
+  `).run(title, category, body_markdown, answer, answer_mode, sort_order, visible_from || null, req.params.id);
 
   // Replace links
   db.prepare('DELETE FROM reference_links WHERE question_id = ?').run(req.params.id);

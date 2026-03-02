@@ -37,7 +37,7 @@ router.get('/questions/:category', requireLogin, requireTeam, checkMaintenance, 
   }
 
   const questions = db.prepare(`
-    SELECT id, title, category, sort_order, unlock_mode, visible_from
+    SELECT id, title, category, sort_order, visible_from
     FROM questions WHERE category = ? ORDER BY sort_order ASC
   `).all(category);
 
@@ -47,32 +47,17 @@ router.get('/questions/:category', requireLogin, requireTeam, checkMaintenance, 
   `).all(req.team.id).map(s => s.question_id);
 
   const now = new Date();
-  let lastSubmitted = true; // First question always unlocked
 
   const result = questions.map((q) => {
     const hasSubmitted = submittedIds.includes(q.id);
     const isVisible = !q.visible_from || new Date(q.visible_from) <= now;
-
-    let isUnlocked;
-    if (q.unlock_mode === 'immediate') {
-      isUnlocked = true;
-    } else {
-      // Sequential: unlocked if previous question was submitted (or first)
-      isUnlocked = lastSubmitted;
-    }
-
-    if (!hasSubmitted && q.unlock_mode === 'sequential') {
-      lastSubmitted = false;
-    } else if (hasSubmitted) {
-      lastSubmitted = true;
-    }
 
     return {
       id: q.id,
       title: q.title,
       category: q.category,
       submitted: hasSubmitted,
-      unlocked: isUnlocked && isVisible,
+      unlocked: isVisible,
       sort_order: q.sort_order
     };
   });
@@ -82,17 +67,8 @@ router.get('/questions/:category', requireLogin, requireTeam, checkMaintenance, 
 
 // ── GET /api/question/:id — Full question detail ─────────────────────────────
 router.get('/question/:id', requireLogin, requireTeam, checkMaintenance, (req, res) => {
-  const question = db.prepare('SELECT id, title, category, body_markdown, sort_order, unlock_mode, visible_from FROM questions WHERE id = ?').get(req.params.id);
+  const question = db.prepare('SELECT id, title, category, body_markdown, sort_order, visible_from FROM questions WHERE id = ?').get(req.params.id);
   if (!question) return res.status(404).json({ error: 'Question not found' });
-
-  // Check if unlocked for this team
-  if (question.unlock_mode === 'sequential') {
-    const prevQ = db.prepare('SELECT id FROM questions WHERE category = ? AND sort_order < ? ORDER BY sort_order DESC LIMIT 1').get(question.category, question.sort_order);
-    if (prevQ) {
-      const prevSubmitted = db.prepare('SELECT id FROM submissions WHERE team_id = ? AND question_id = ? LIMIT 1').get(req.team.id, prevQ.id);
-      if (!prevSubmitted) return res.status(403).json({ error: 'Question locked' });
-    }
-  }
 
   // Log view
   db.prepare('INSERT INTO question_views (team_id, question_id) VALUES (?, ?)').run(req.team.id, question.id);

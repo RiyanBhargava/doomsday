@@ -49,8 +49,6 @@ db.exec(`
     body_markdown TEXT NOT NULL,
     answer TEXT NOT NULL,
     answer_mode TEXT DEFAULT 'exact', -- exact, case-insensitive, contains
-    points INTEGER DEFAULT 100,
-    unlock_mode TEXT DEFAULT 'sequential', -- sequential, immediate
     sort_order INTEGER DEFAULT 0,
     visible_from DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -84,18 +82,6 @@ db.exec(`
     is_correct INTEGER DEFAULT 0,
     time_taken INTEGER DEFAULT 0,     -- seconds spent on question
     submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (team_id) REFERENCES teams(id),
-    FOREIGN KEY (question_id) REFERENCES questions(id)
-  );
-
-  -- Solved questions tracker
-  CREATE TABLE IF NOT EXISTS solved (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    team_id INTEGER NOT NULL,
-    question_id INTEGER NOT NULL,
-    points_awarded INTEGER DEFAULT 0,
-    solved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(team_id, question_id),
     FOREIGN KEY (team_id) REFERENCES teams(id),
     FOREIGN KEY (question_id) REFERENCES questions(id)
   );
@@ -151,8 +137,6 @@ db.exec(`
 const insertSetting = db.prepare(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`);
 insertSetting.run('competition_start', '');
 insertSetting.run('competition_end', '');
-insertSetting.run('leaderboard_visible', '1');
 insertSetting.run('maintenance_mode', '0');
-insertSetting.run('wrong_answer_penalty', '0');
 
 module.exports = db;
