@@ -3,13 +3,9 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { requireLogin, requireTeam, checkMaintenance } = require('../middleware/auth');
-const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const gdrive = require('../services/gdrive');
-
-// File upload config — memory storage (files go straight to Google Drive, not saved locally)
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB
 
 // ── Helper: check competition time ──────────────────────────────────────────
 function isCompetitionActive() {
@@ -84,8 +80,7 @@ router.get('/question/:id', requireLogin, requireTeam, checkMaintenance, (req, r
   const submissions = db.prepare('SELECT id, submitted_value, submitted_at FROM submissions WHERE team_id = ? AND question_id = ? ORDER BY submitted_at DESC').all(req.team.id, question.id);
 
   const previousSubmissions = submissions.map(s => {
-    const files = db.prepare('SELECT id, filename, filepath FROM submission_files WHERE submission_id = ?').all(s.id);
-    return { ...s, files };
+    return { ...s, files: [] };
   });
 
   res.json({
@@ -97,15 +92,15 @@ router.get('/question/:id', requireLogin, requireTeam, checkMaintenance, (req, r
   });
 });
 
-// ── POST /api/submit/:questionId — Save submission (text + files) ────────────
-router.post('/submit/:questionId', requireLogin, requireTeam, checkMaintenance, upload.array('files', 10), (req, res) => {
+// ── POST /api/submit/:questionId ── Save submission link ─────────────────────────
+router.post('/submit/:questionId', requireLogin, requireTeam, checkMaintenance, (req, res) => {
   const question = db.prepare('SELECT * FROM questions WHERE id = ?').get(req.params.questionId);
   if (!question) return res.status(404).json({ error: 'Question not found' });
 
   const answer = req.body.answer || '';
 
-  if (!answer.trim() && (!req.files || req.files.length === 0)) {
-    return res.status(400).json({ error: 'Provide a text answer or attach files' });
+  if (!answer.trim()) {
+    return res.status(400).json({ error: 'Provide a submission link' });
   }
 
   // Save submission
@@ -114,33 +109,20 @@ router.post('/submit/:questionId', requireLogin, requireTeam, checkMaintenance, 
   );
   const submissionId = result.lastInsertRowid;
 
-  // Upload files directly to Google Drive (no local storage)
-  if (req.files && req.files.length > 0) {
-    const insertFile = db.prepare('INSERT INTO submission_files (submission_id, filename, filepath) VALUES (?, ?, ?)');
-    for (const file of req.files) {
-      // Store a Drive reference path in DB
-      const drivePath = `drive://${req.team.team_name}/${question.title}/${file.originalname}`;
-      insertFile.run(submissionId, file.originalname, drivePath);
-
-      // Upload buffer to Google Drive (non-blocking)
-      gdrive.uploadSubmissionFile(
-        file.buffer,
-        file.originalname,
-        file.mimetype,
-        req.team.team_name,
-        question.title
-      ).catch(err => console.error('Drive upload error:', err.message));
-    }
-  }
-
   // Log activity
   db.prepare(`INSERT INTO activity_log (team_id, question_id, activity_type, category, submitted_value) VALUES (?, ?, 'submission', ?, ?)`).run(
     req.team.id, question.id, question.category,
-    answer.trim() ? answer.trim().substring(0, 200) : '[file submission]'
+    answer.trim().substring(0, 200)
   );
 
-  // Trigger Drive activity sync (non-blocking)
+  // Trigger Drive activity log sync (non-blocking)
   gdrive.syncActivityLog(db).catch(() => {});
+  gdrive.syncSubmissionsLog(db).catch(() => {});
+
+  // Broadcast to admin dashboard
+  if (req.app.get('io')) {
+    req.app.get('io').emit('new_activity');
+  }
 
   res.json({ success: true, submissionId });
 });

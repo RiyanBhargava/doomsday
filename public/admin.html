@@ -383,7 +383,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 
   <script>
     const socket = io();
@@ -704,7 +704,7 @@
                   <span class="sub-time">${time}</span>
                 </div>
                 ${s.submitted_value ? `<div class="sub-value">${escapeHtml(s.submitted_value)}</div>` : ''}
-                ${s.files && s.files.length > 0 ? `<div class="sub-files" style="margin-top:6px;">${s.files.map(f => `<a href="/${f.filepath}" download="${escapeAttr(f.filename)}">&#128206; ${escapeHtml(f.filename)}</a>`).join('')}</div>` : ''}
+                ${s.files && s.files.length > 0 ? `<div class="sub-files" style="margin-top:6px;">${s.files.map(f => `<a href="${f.filepath.startsWith('http') ? f.filepath : '/' + f.filepath}" target="_blank">&#128206; ${escapeHtml(f.filename)}</a>`).join('')}</div>` : ''}
               </div>
             `;
           }).join('');

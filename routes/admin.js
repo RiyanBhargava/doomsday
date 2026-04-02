@@ -245,15 +245,7 @@ router.post('/team/unban/:id', (req, res) => {
 
 router.post('/team/reset/:id', (req, res) => {
   const teamId = req.params.id;
-  // Delete submission files from disk
-  const subIds = db.prepare('SELECT id FROM submissions WHERE team_id = ?').all(teamId).map(s => s.id);
-  for (const sid of subIds) {
-    const files = db.prepare('SELECT filepath FROM submission_files WHERE submission_id = ?').all(sid);
-    files.forEach(f => { try { fs.unlinkSync(path.join(__dirname, '..', f.filepath)); } catch (e) {} });
-    db.prepare('DELETE FROM submission_files WHERE submission_id = ?').run(sid);
-  }
-  db.prepare('DELETE FROM submissions WHERE team_id = ?').run(teamId);
-  db.prepare('DELETE FROM question_views WHERE team_id = ?').run(teamId);
+
   res.json({ success: true });
 });
 
@@ -295,8 +287,7 @@ router.get('/submissions', (req, res) => {
 
   // Attach files to each submission
   const result = rows.map(row => {
-    const files = db.prepare('SELECT id, filename, filepath FROM submission_files WHERE submission_id = ?').all(row.id);
-    return { ...row, files };
+    return { ...row, files: [] };
   });
 
   let countQuery = 'SELECT COUNT(*) as count FROM submissions s JOIN questions q ON s.question_id = q.id JOIN teams t ON s.team_id = t.id WHERE 1=1';

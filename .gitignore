@@ -4,3 +4,8 @@ doomsday.db
 doomsday.db-shm
 doomsday.db-wal
 uploads/
+__pycache__/
+*.pyc
+*.pyo
+venv/
+flask_session/

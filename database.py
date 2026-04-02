@@ -1,16 +1,50 @@
-// database.js — SQLite setup and schema
-const Database = require('better-sqlite3');
-const path = require('path');
+import sqlite3
+import os
+from flask import g
 
-const db = new Database(path.join(__dirname, 'doomsday.db'));
+DB_PATH = os.path.join(os.path.dirname(__file__), 'doomsday.db')
 
-// Enable WAL mode for better concurrent read performance
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+def get_db():
+    db = getattr(g, '_database', None)
+    if db is None:
+        db = g._database = sqlite3.connect(DB_PATH, isolation_level=None) # Autocommit mode like better-sqlite3 for basic queries
+        db.row_factory = sqlite_dict_factory
+        db.execute('PRAGMA journal_mode = WAL')
+        db.execute('PRAGMA foreign_keys = ON')
+        # Ensure schema exists (same exact queries as Node.js)
+        init_schema(db)
+    return db
 
-// ── Schema ──────────────────────────────────────────────────────────────────
+def sqlite_dict_factory(cursor, row):
+    d = {}
+    for idx, col in enumerate(cursor.description):
+        d[col[0]] = row[idx]
+    return d
 
-db.exec(`
+def query_db(query, args=(), one=False):
+    cur = get_db().execute(query, args)
+    rv = cur.fetchall()
+    cur.close()
+    return (rv[0] if rv else None) if one else rv
+
+def insert_db(query, args=()):
+    db = get_db()
+    cur = db.cursor()
+    cur.execute(query, args)
+    db.commit() # Ensure committed if not auto-committed
+    last_id = cur.lastrowid
+    cur.close()
+    return last_id
+
+def execute_db(query, args=()):
+    db = get_db()
+    cur = db.cursor()
+    cur.execute(query, args)
+    db.commit()
+    cur.close()
+
+def init_schema(db):
+    db.executescript("""
   -- Users table (Google OAuth)
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,13 +155,14 @@ db.exec(`
     message TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-`);
+  """)
 
-// ── Insert default settings ─────────────────────────────────────────────────
+    db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('competition_start', '')")
+    db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('competition_end', '')")
+    db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('maintenance_mode', '0')")
+    db.commit()
 
-const insertSetting = db.prepare(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`);
-insertSetting.run('competition_start', '');
-insertSetting.run('competition_end', '');
-insertSetting.run('maintenance_mode', '0');
-
-module.exports = db;
+def close_db(e=None):
+    db = getattr(g, '_database', None)
+    if db is not None:
+        db.close()

@@ -1,0 +1,7 @@
+Flask==3.0.3
+Flask-Session==0.8.0
+Flask-SocketIO==5.3.6
+google-auth==2.35.0
+google-api-python-client==2.146.0
+python-dotenv==1.0.1
+requests==2.32.3
