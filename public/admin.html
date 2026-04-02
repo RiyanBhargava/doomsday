@@ -901,7 +901,8 @@
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [key]: value })
-      }
+      });
+    }
 
       async function saveSettings() {
       const data = {
