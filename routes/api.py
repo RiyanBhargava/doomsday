@@ -150,9 +150,7 @@ def submit_answer(question_id):
 
     data = request.get_json()
     if not data or not data.get('answer'):
-        return jsonify({'error': 'Provide a submission link'}), 400
-        
-    answer = data.get('answer', '').strip()
+        return jsonify({'error': 'Provide an answer'}), 400
 
     team_id = g.team['id']
     team_name = g.team['team_name']
