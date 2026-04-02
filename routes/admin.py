@@ -252,11 +252,6 @@ def create_announcement():
         return jsonify({'error': 'Message required'}), 400
 
     insert_db('INSERT INTO announcements (message) VALUES (?)', [message])
-    try:
-        current_app.extensions['socketio'].emit('announcement', message)
-    except Exception:
-        pass
-
     return jsonify({'success': True, 'message': message})
 
 @admin_bp.route('/teams', methods=['GET'])

@@ -331,7 +331,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 
   <script>
     // ═══════════════════════════════════════════════════════════════════════════
@@ -343,7 +342,6 @@
     let currentCategory = null;
     let currentQuestionId = null;
     let soundEnabled = false;
-    const socket = io();
 
     // ── Audio (Web Audio API) ────────────────────────────────────────────────
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1339,17 +1337,28 @@
       window.location.href = '/';
     }
 
-    // ── Socket.io Events ──────────────────────────────────────────────────────
-    socket.on('announcement', (msg) => {
-      const bar = document.getElementById('announcement-bar');
-      bar.textContent = msg;
-      bar.classList.add('active');
-      showToast(msg, 'warning');
-    });
-
-    socket.on('maintenance', () => {
-      showToast('Competition is under maintenance', 'warning');
-    });
+    // ── Polling logic (Replacing SocketIO) ──────────────────────────────────
+    let lastAnnouncementCount = 0;
+    setInterval(async () => {
+      try {
+        // Check maintenance mode (using any ping/progress endpoint or /api/status if exists)
+        // Check announcements
+        const annRes = await fetch('/api/announcements');
+        const anns = await annRes.json();
+        if (anns && anns.length > lastAnnouncementCount) {
+          if (lastAnnouncementCount !== 0) {
+            const newest = anns[0].message;
+            const bar = document.getElementById('announcement-bar');
+            bar.textContent = newest;
+            bar.classList.add('active');
+            showToast(newest, 'warning');
+          }
+          lastAnnouncementCount = anns.length;
+        }
+      } catch (e) {
+        console.error('Polling error', e);
+      }
+    }, 30000);
 
     // ── Starfield ──────────────────────────────────────────────────────────────
     (function initStarfield() {

@@ -2,7 +2,7 @@ import os
 import sys
 
 # Add your project directory to the sys.path
-project_home = u'/home/yourusername/doomsday'
+project_home = u'/home/acmdoomsday2026/doomsday'
 if project_home not in sys.path:
     sys.path = [project_home] + sys.path
 

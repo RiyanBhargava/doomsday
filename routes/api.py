@@ -110,14 +110,8 @@ def get_question(id):
 
     team_id = g.team['id']
     insert_db('INSERT INTO question_views (team_id, question_id) VALUES (?, ?)', [team_id, id])
-    insert_db("INSERT INTO activity_log (team_id, question_id, activity_type, category) VALUES (?, ?, 'question_viewed', ?)", 
+    insert_db("INSERT INTO activity_log (team_id, question_id, activity_type, category) VALUES (?, ?, 'question_viewed', ?)",
               [team_id, id, question_dict['category']])
-
-    # Socket broadcast for activity
-    try:
-        current_app.extensions['socketio'].emit('new_activity')
-    except:
-        pass
 
     attachments = query_db('SELECT id, filename, filepath FROM attachments WHERE question_id = ?', [id])
     links = query_db('SELECT id, label, url FROM reference_links WHERE question_id = ?', [id])
@@ -171,16 +165,6 @@ def submit_answer(question_id):
     activity_val = answer[:200]
     insert_db("INSERT INTO activity_log (team_id, question_id, activity_type, category, submitted_value) VALUES (?, ?, 'submission', ?, ?)",
               [team_id, question_id, question['category'], activity_val])
-
-    # Broadcast
-    try:
-        from app import socketio
-        socketio.emit('new_activity')
-    except:
-        pass
-
-    import threading
-    threading.Thread(target=trigger_drive_sync, args=(app,), daemon=True).start()
 
     return jsonify({'success': True, 'submissionId': submission_id})
 
