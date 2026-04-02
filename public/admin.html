@@ -541,10 +541,11 @@
     async function deleteQuestion(id) {
       if (!confirm('Delete this question permanently?')) return;
       try {
-        await fetch(`/admin/question/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/admin/question/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to delete');
         showToast('Question deleted');
         loadQuestions();
-      } catch (e) { showToast('Failed', 'error'); }
+      } catch (e) { showToast('Failed to delete question', 'error'); }
     }
 
     async function saveQuestion() {

@@ -89,8 +89,15 @@ def delete_question(id):
         except Exception:
             pass
 
-    execute_db('DELETE FROM questions WHERE id = ?', [id])
-    return jsonify({'success': True})
+    try:
+        execute_db('DELETE FROM attachments WHERE question_id = ?', [id])
+        execute_db('DELETE FROM reference_links WHERE question_id = ?', [id])
+        execute_db('DELETE FROM submissions WHERE question_id = ?', [id])
+        execute_db('DELETE FROM question_views WHERE question_id = ?', [id])
+        execute_db('DELETE FROM questions WHERE id = ?', [id])
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @admin_bp.route('/question/<int:id>/upload', methods=['POST'])
 def upload_attachment(id):
