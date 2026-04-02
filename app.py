@@ -10,6 +10,9 @@ load_dotenv()
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
+# Disable caching for static files to prevent stale updates on PythonAnywhere
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+
 # Configuration
 app.config['SECRET_KEY'] = os.getenv('SESSION_SECRET', 'doomsday-secret-change-in-production')
 app.config['SESSION_TYPE'] = 'filesystem'
