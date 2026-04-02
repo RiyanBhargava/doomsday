@@ -152,6 +152,8 @@ def submit_answer(question_id):
     if not data or not data.get('answer'):
         return jsonify({'error': 'Provide an answer'}), 400
 
+    answer = data.get('answer', '').strip()
+
     team_id = g.team['id']
     team_name = g.team['team_name']
 
@@ -163,6 +165,12 @@ def submit_answer(question_id):
     activity_val = answer[:200]
     insert_db("INSERT INTO activity_log (team_id, question_id, activity_type, category, submitted_value) VALUES (?, ?, 'submission', ?, ?)",
               [team_id, question_id, question['category'], activity_val])
+
+    try:
+        gdrive.sync_activity_log()
+        gdrive.sync_submissions_log()
+    except Exception as e:
+        print('Drive sync error:', e)
 
     return jsonify({'success': True, 'submissionId': submission_id})
 
