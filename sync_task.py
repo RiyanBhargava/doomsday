@@ -11,12 +11,14 @@ if project_home not in sys.path:
 from dotenv import load_dotenv
 load_dotenv(os.path.join(project_home, '.env'))
 
+from app import app
 from services.gdrive import init_gdrive, full_sync
 
 if __name__ == '__main__':
     if init_gdrive():
         print("Starting full sync...")
-        full_sync()
+        with app.app_context():
+            full_sync()
         print("Sync complete.")
     else:
         print("Failed to initialize Google Drive sync.")
