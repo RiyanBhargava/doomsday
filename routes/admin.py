@@ -406,3 +406,24 @@ def export_activity():
         mimetype="text/csv",
         headers={"Content-disposition": "attachment; filename=activity_log.csv"}
     )
+
+@admin_bp.route('/export-teams', methods=['GET'])
+def export_teams():
+    rows = query_db('''
+        SELECT id, team_name, points, penalty_points, is_banned, last_active, members
+        FROM teams
+        ORDER BY points DESC, id ASC
+    ''')
+
+    csv_data = 'Team #,Team Name,Points,Penalty,Banned,Last Active,Members\n'
+    for r in rows:
+        val = r['members'] or ''
+        val = val.replace('"', '""')
+        csv_data += f'"{r["id"]}","{r["team_name"]}","{r["points"]}","{r["penalty_points"]}","{r["is_banned"]}","{r["last_active"]}","{val}"\n'
+
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-disposition": "attachment; filename=teams.csv"}
+    )
+

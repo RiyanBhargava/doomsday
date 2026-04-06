@@ -131,13 +131,6 @@ def get_question(id):
 
     return jsonify(question_dict)
 
-def trigger_drive_sync(app):
-    with app.app_context():
-        import database
-        # just call gdrive directly, it will use its own db conn if needed, but we wrote it to not need db object for upload
-        # Wait, sync_activity_log uses query_db
-        gdrive.sync_activity_log()
-        gdrive.sync_submissions_log()
 
 @api_bp.route('/submit/<int:question_id>', methods=['POST'])
 @require_login
@@ -165,12 +158,6 @@ def submit_answer(question_id):
     activity_val = answer[:200]
     insert_db("INSERT INTO activity_log (team_id, question_id, activity_type, category, submitted_value) VALUES (?, ?, 'submission', ?, ?)",
               [team_id, question_id, question['category'], activity_val])
-
-    try:
-        gdrive.sync_activity_log()
-        gdrive.sync_submissions_log()
-    except Exception as e:
-        print('Drive sync error:', e)
 
     return jsonify({'success': True, 'submissionId': submission_id})
 
