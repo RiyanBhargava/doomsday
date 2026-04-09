@@ -1084,10 +1084,22 @@
         if (nextVideoEl) nextVideoEl.style.opacity = '1';
         if (videoEl) videoEl.style.opacity = '0';
       }
-catch (e) {
-        console.error('Failed to load progress:', e);
+
+      // ── Load Progress ─────────────────────────────────────────────────────────
+      async function loadProgress() {
+        try {
+          const res = await fetch('/api/progress');
+          const data = await res.json();
+          progressData = data.progress;
+
+          for (const cat of ['AI', 'CP', 'HEX', 'DEV']) {
+            const p = progressData[cat] || { total: 0, submitted: 0 };
+            globe.setProgress(cat, p.submitted, p.total);
+          }
+        } catch (e) {
+          console.error('Failed to load progress:', e);
+        }
       }
-    }
 
     // ── Countdown Timer ───────────────────────────────────────────────────────
     function startCountdown() {
