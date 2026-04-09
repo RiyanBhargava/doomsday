@@ -1023,6 +1023,7 @@
       let ytPlayer1;
       let hasSwapped = false;
       let fallbackTimer;
+      let stopPoller;
 
       function onYouTubeIframeAPIReady() {
         ytPlayer1 = new YT.Player('bg-video', {
@@ -1045,8 +1046,23 @@
       function onPlayer1StateChange(event) {
         if (event.data == YT.PlayerState.PLAYING) {
           clearTimeout(fallbackTimer);
-        }
-        if (event.data == YT.PlayerState.ENDED) {
+          if (!stopPoller) {
+            stopPoller = setInterval(() => {
+              if (ytPlayer1 && ytPlayer1.getDuration) {
+                const timeLeft = ytPlayer1.getDuration() - ytPlayer1.getCurrentTime();
+                if (timeLeft > 0 && timeLeft <= 0.2) {
+                  ytPlayer1.pauseVideo();
+                  clearInterval(stopPoller);
+                  // Pause the frame for 1 second, then slowly fade out
+                  setTimeout(() => {
+                    showGlobeAndFadeVideo();
+                  }, 1000);
+                }
+              }
+            }, 50);
+          }
+        } else if (event.data == YT.PlayerState.ENDED) {
+          if (stopPoller) clearInterval(stopPoller);
           showGlobeAndFadeVideo();
         }
       }
