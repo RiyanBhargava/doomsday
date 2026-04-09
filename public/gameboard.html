@@ -1027,14 +1027,20 @@
       video.muted = true;
       video.volume = 0;
 
-      // Phase 1: Play starting video
-      video.play().catch(() => {
-        // Autoplay blocked — show globe immediately as fallback
-        showGlobeAndMiddleVideo();
-      });
+        // Force UI visible if video stalls (Google Drive stream protections)
+        const fallbackTimer = setTimeout(showGlobeAndMiddleVideo, 2500);
 
-      video.addEventListener('ended', function onStartEnd() {
-        video.removeEventListener('ended', onStartEnd);
+        video.addEventListener('error', function() {
+          clearTimeout(fallbackTimer);
+          showGlobeAndMiddleVideo();
+        });
+
+        // Phase 1: Play starting video
+        video.play().then(() => {
+           clearTimeout(fallbackTimer); // Clear if play starts fine
+        }).catch(() => {
+          // Autoplay blocked — show globe immediately as fallback
+          clearTimeout(fallbackTimer);
         // Phase 2: Starting video done → show globe, switch to middle video
         showGlobeAndMiddleVideo();
       });
