@@ -28,6 +28,8 @@
       object-fit: cover;
       object-position: center 40%;
       z-index: 0;
+      transform: scale(1.35); /* Zooms in to crop black pillarboxing edges */
+      transform-origin: center center;
     }
     .globe-container {
       position: absolute;
@@ -1038,7 +1040,7 @@
         });
 
         ytPlayer2 = new YT.Player('bg-video-next', {
-          videoId: '4h_QuV0BG0g', // DOOM MIDDLE (Temporary placeholder)
+          videoId: 'wnOBLWSOGqw', // DOOM MIDDLE (Temporary placeholder)
           playerVars: { 'autoplay': 0, 'controls': 0, 'showinfo': 0, 'rel': 0, 'mute': 1, 'playsinline': 1, 'modestbranding': 1, 'fs': 0, 'vq': 'hd2160' },
           events: {
             'onReady': (e) => { e.target.setPlaybackQuality('hd2160'); e.target.setVolume(0); },
