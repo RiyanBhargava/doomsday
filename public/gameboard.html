@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="icon" href="data:,">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DOOMSDAY — Mission Control</title>
@@ -1078,8 +1079,11 @@
 
       // Initialize globe but don't show yet
       globe.init(document.getElementById('globe-canvas'));
-    
-            // ── Video Background Sequence ─────────────────────────────────────────────────────────────
+
+      startVideoSequence();
+    }
+
+    // ── Video Background Sequence ─────────────────────────────────────────────────────────────
       let ytPlayer1;
       let hasSwapped = false;
       let fallbackTimer;
@@ -1177,7 +1181,7 @@
 
     // ── Countdown Timer ───────────────────────────────────────────────────────
     function startCountdown() {
-      fetch('/api/competition-info').then(r => r.json()).then(data => {
+      fetch('/api/competition-info').then(r => r.ok ? r.json() : {}).catch(e => ({})).then(data => {
         if (!data.end) {
           document.getElementById('countdown').textContent = '';
           return;
