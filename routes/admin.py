@@ -108,12 +108,12 @@ def upload_attachment(id):
     if file.filename == '':
         return jsonify({'error': 'No file'}), 400
 
-    upload_dir = os.path.join(os.path.dirname(__file__), '..', 'uploads')
+    upload_dir = os.path.join(os.path.dirname(__file__), '..', 'uploads', str(id))
     if not os.path.exists(upload_dir):
         os.makedirs(upload_dir, exist_ok=True)
 
-    filename = str(int(time.time() * 1000)) + '-' + secure_filename(file.filename)
-    filepath = 'uploads/' + filename
+    filename = secure_filename(file.filename)
+    filepath = f"uploads/{id}/{filename}"
     
     # Save file to disk
     full_path = os.path.join(upload_dir, filename)

@@ -100,22 +100,19 @@
     /* Question Panel */
     .question-panel {
       position: fixed;
-      top: 0; right: -650px;
-      width: 640px;
-      max-width: 95vw;
-      height: 100vh;
-      background: rgba(5,5,5,0.97);
-      border-left: 2px solid #004d00;
-      z-index: 100;
-      overflow-y: auto;
-      transition: right 0.4s cubic-bezier(.22,.61,.36,1);
-      padding: 0;
-      backdrop-filter: blur(10px);
-    }
-    .question-panel.open { right: 0; }
-
-    .panel-backdrop {
-      position: fixed;
+        top: 0; left: -650px;
+        width: 640px;
+        max-width: 95vw;
+        height: 100vh;
+        background: rgba(5,5,5,0.97);
+        border-right: 2px solid #004d00;
+        z-index: 100;
+        overflow-y: auto;
+        transition: left 0.4s cubic-bezier(.22,.61,.36,1);
+        padding: 0;
+        backdrop-filter: blur(10px);
+      }
+      .question-panel.open { left: 0; }
       top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0,0,0,0.4);
       z-index: 99;
@@ -257,8 +254,7 @@
     <canvas id="starfield" style="opacity:0;transition:opacity 1.2s ease;"></canvas>
 
     <!-- Video Background (YouTube) -->
-    <div id="bg-video" class="gameboard-bg" style="pointer-events:none; transition:opacity 0.5s ease;"></div>
-    <div id="bg-video-next" class="gameboard-bg" style="opacity:0; pointer-events:none; transition:opacity 0.5s ease;"></div>
+    <div id="bg-video" class="gameboard-bg" style="pointer-events:none; transition:opacity 2s ease;"></div>
 
     <!-- 3D Globe -->
     <div class="globe-container" id="globe-container">
@@ -1024,10 +1020,9 @@
 
     
             // ── Video Background Sequence ─────────────────────────────────────────────────────────────
-      let ytPlayer1, ytPlayer2;
+      let ytPlayer1;
       let hasSwapped = false;
       let fallbackTimer;
-      let freezePoller;
 
       function onYouTubeIframeAPIReady() {
         ytPlayer1 = new YT.Player('bg-video', {
@@ -1039,21 +1034,12 @@
           }
         });
 
-        ytPlayer2 = new YT.Player('bg-video-next', {
-          videoId: 'wnOBLWSOGqw', // DOOM MIDDLE (Temporary placeholder)
-          playerVars: { 'autoplay': 0, 'controls': 0, 'showinfo': 0, 'rel': 0, 'mute': 1, 'playsinline': 1, 'modestbranding': 1, 'fs': 0, 'vq': 'hd2160' },
-          events: {
-            'onReady': (e) => { e.target.setPlaybackQuality('hd2160'); e.target.setVolume(0); },
-            'onStateChange': onPlayer2StateChange
-          }
-        });
-
-        fallbackTimer = setTimeout(showGlobeAndMiddleVideo, 5000); // 5 sec fallback
+        fallbackTimer = setTimeout(showGlobeAndFadeVideo, 5000); // 5 sec fallback
       }
 
       function onPlayer1Ready(event) {
         event.target.setPlaybackQuality('hd2160');
-          event.target.setPlaybackRate(1.5);
+        event.target.setPlaybackRate(1.5);
       }
 
       function onPlayer1StateChange(event) {
@@ -1061,28 +1047,7 @@
           clearTimeout(fallbackTimer);
         }
         if (event.data == YT.PlayerState.ENDED) {
-          showGlobeAndMiddleVideo();
-        }
-      }
-
-      function onPlayer2StateChange(event) {
-        if (event.data == YT.PlayerState.PLAYING) {
-          // Hide video 1 ONLY AFTER video 2 has started rendering frames
-          const videoEl = document.getElementById('bg-video');
-          if (videoEl) videoEl.style.opacity = '0';
-
-          // Poll to freeze at the last frame right before it ends to prevent YouTube "More Videos" grid from showing
-          if (!freezePoller) {
-            freezePoller = setInterval(() => {
-              if (ytPlayer2 && ytPlayer2.getDuration) {
-                const timeLeft = ytPlayer2.getDuration() - ytPlayer2.getCurrentTime();
-                if (timeLeft > 0 && timeLeft <= 0.15) {
-                  ytPlayer2.pauseVideo();
-                  clearInterval(freezePoller);
-                }
-              }
-            }, 50);
-          }
+          showGlobeAndFadeVideo();
         }
       }
 
@@ -1090,12 +1055,11 @@
         // Handled intrinsically
       }
 
-      function showGlobeAndMiddleVideo() {
+      function showGlobeAndFadeVideo() {
         if (hasSwapped) return;
         hasSwapped = true;
 
         const videoEl = document.getElementById('bg-video');
-        const nextVideoEl = document.getElementById('bg-video-next');
         const globeEl = document.getElementById('globe-container');
         const hudEl = document.querySelector('.gameboard-hud');
         const starfieldEl = document.getElementById('starfield');
@@ -1105,11 +1069,16 @@
         if(hudEl) hudEl.style.opacity = '1';
         if(starfieldEl) starfieldEl.style.opacity = '1';
 
-        // Play second video, fade it in immediately over the old video (DON'T fade old one until playing)
-        if (ytPlayer2 && typeof ytPlayer2.playVideo === 'function') {
-          ytPlayer2.playVideo();
+        // Fade out the first video
+        if (videoEl) {
+          videoEl.style.transition = 'opacity 2s ease';
+          videoEl.style.opacity = '0';
+          setTimeout(() => {
+            if (ytPlayer1 && typeof ytPlayer1.stopVideo === 'function') {
+              ytPlayer1.stopVideo();
+            }
+          }, 2000);
         }
-        if (nextVideoEl) nextVideoEl.style.opacity = '1';
       }
 
       // ── Load Progress ─────────────────────────────────────────────────────────

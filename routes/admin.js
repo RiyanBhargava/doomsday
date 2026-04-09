@@ -10,13 +10,13 @@ const fs = require('fs');
 // File upload config
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = path.join(__dirname, '..', 'uploads');
+    const qid = req.params.id || 'misc';
+    const dir = path.join(__dirname, '..', 'uploads', String(qid));
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
   filename: (req, file, cb) => {
-    const uniqueName = Date.now() + '-' + file.originalname;
-    cb(null, uniqueName);
+    cb(null, file.originalname);
   }
 });
 const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB limit
@@ -98,7 +98,7 @@ router.delete('/question/:id', (req, res) => {
 router.post('/question/:id/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
 
-  const filepath = 'uploads/' + req.file.filename;
+  const filepath = 'uploads/' + req.params.id + '/' + req.file.originalname;
   db.prepare('INSERT INTO attachments (question_id, filename, filepath) VALUES (?, ?, ?)').run(
     req.params.id, req.file.originalname, filepath
   );
