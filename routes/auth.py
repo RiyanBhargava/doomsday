@@ -149,6 +149,12 @@ def join_team():
 def auth_me():
     if 'user' not in session:
         return jsonify({'loggedIn': False})
+    
+    # Verify user still exists in DB in case of database reset
+    db_user = query_db('SELECT id FROM users WHERE id = ?', [session['user']['id']], one=True)
+    if not db_user:
+        session.clear()
+        return jsonify({'loggedIn': False})
         
     team = get_user_team(session['user']['id'])
     return jsonify({
