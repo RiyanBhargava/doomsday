@@ -1468,7 +1468,6 @@
       list.innerHTML = anns.map(a => `
         <div class="ann-item-board">
           ${escapeHtml(a.message)}
-          <div class="ann-time-board">${new Date(a.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
         </div>
       `).join('');
     }
