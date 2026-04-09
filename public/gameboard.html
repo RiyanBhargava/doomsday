@@ -254,11 +254,9 @@
     <!-- Starfield -->
     <canvas id="starfield" style="opacity:0;transition:opacity 1.2s ease;"></canvas>
 
-    <!-- Video Background -->
-    <video id="bg-video" class="gameboard-bg" muted playsinline preload="auto" style="transition:opacity 0.5s ease;">
-      <source src="https://drive.google.com/uc?export=download&id=13va0v6E0hdQqV_H6NNMd3dLv9-J6IFOa" type="video/mp4">
-    </video>
-    <video id="bg-video-next" class="gameboard-bg" muted playsinline preload="auto" src="https://drive.google.com/uc?export=download&id=1ngEQumujVJCSknuQN8T5ejQcRj9plW9-" style="opacity:0;transition:opacity 0.5s ease;"></video>
+    <!-- Video Background (YouTube) -->
+    <div id="bg-video" class="gameboard-bg" style="pointer-events:none; transition:opacity 0.5s ease;"></div>
+    <div id="bg-video-next" class="gameboard-bg" style="opacity:0; pointer-events:none; transition:opacity 0.5s ease;"></div>
 
     <!-- 3D Globe -->
     <div class="globe-container" id="globe-container">
@@ -332,6 +330,7 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 
+  <script src="https://www.youtube.com/iframe_api"></script>
   <script>
     // ═══════════════════════════════════════════════════════════════════════════
     // GAMEBOARD CONTROLLER
@@ -1021,70 +1020,71 @@
       startVideoSequence();
     }
 
-    // ── Video Background Sequence ─────────────────────────────────────────────
-    function startVideoSequence() {
-      const video = document.getElementById('bg-video');
-      video.muted = true;
-      video.volume = 0;
+    
+      // ── Video Background Sequence ─────────────────────────────────────────────────────────────
+      let ytPlayer1, ytPlayer2;
+      let hasSwapped = false;
+      let fallbackTimer;
 
-        // Force UI visible if video stalls (Google Drive stream protections)
-        const fallbackTimer = setTimeout(showGlobeAndMiddleVideo, 2500);
-
-        video.addEventListener('error', function() {
-          clearTimeout(fallbackTimer);
-          showGlobeAndMiddleVideo();
+      function onYouTubeIframeAPIReady() {
+        ytPlayer1 = new YT.Player('bg-video', {
+          videoId: '4h_QuV0BG0g', // DOOM STARTING
+          playerVars: { 'autoplay': 1, 'controls': 0, 'showinfo': 0, 'rel': 0, 'mute': 1, 'playsinline': 1, 'modestbranding': 1, 'fs': 0 },
+          events: {
+            'onReady': onPlayerReady,
+            'onStateChange': onPlayerStateChange
+          }
         });
 
-        // Phase 1: Play starting video
-        video.play().then(() => {
-           clearTimeout(fallbackTimer); // Clear if play starts fine
-        }).catch(() => {
-          // Autoplay blocked — show globe immediately as fallback
+        ytPlayer2 = new YT.Player('bg-video-next', {
+          videoId: '4h_QuV0BG0g', // DOOM MIDDLE (Temporary placeholder)
+          playerVars: { 'autoplay': 0, 'controls': 0, 'showinfo': 0, 'rel': 0, 'mute': 1, 'playsinline': 1, 'modestbranding': 1, 'fs': 0, 'loop': 1, 'playlist': '4h_QuV0BG0g' }
+        });
+
+        fallbackTimer = setTimeout(showGlobeAndMiddleVideo, 5000); // 5 sec fallback
+      }
+
+      function onPlayerReady(event) {
+        event.target.playVideo();
+      }
+
+      function onPlayerStateChange(event) {
+        if (event.data == YT.PlayerState.PLAYING) {
           clearTimeout(fallbackTimer);
-        // Phase 2: Starting video done → show globe, switch to middle video
-        showGlobeAndMiddleVideo();
-      });
-    }
-
-    function showGlobeAndMiddleVideo() {
-      const video = document.getElementById('bg-video');
-      const nextVideo = document.getElementById('bg-video-next');
-      const globeEl = document.getElementById('globe-container');
-      const hudEl = document.querySelector('.gameboard-hud');
-      const starfieldEl = document.getElementById('starfield');
-
-      // Fade in globe, HUD, starfield
-      globeEl.style.opacity = '1';
-      hudEl.style.opacity = '1';
-      starfieldEl.style.opacity = '1';
-
-      // Crossfade: show next video, hide starting video
-      nextVideo.muted = true;
-      nextVideo.volume = 0;
-      nextVideo.loop = false;
-      nextVideo.currentTime = 0;
-      nextVideo.play().then(() => {
-        nextVideo.style.opacity = '1';
-        video.style.opacity = '0';
-      }).catch(() => {
-        // Fallback: just swap immediately
-        nextVideo.style.opacity = '1';
-        video.style.opacity = '0';
-      });
-    }
-
-    // ── Load Progress ─────────────────────────────────────────────────────────
-    async function loadProgress() {
-      try {
-        const res = await fetch('/api/progress');
-        const data = await res.json();
-        progressData = data.progress;
-
-        for (const cat of ['AI', 'CP', 'HEX', 'DEV']) {
-          const p = progressData[cat] || { total: 0, submitted: 0 };
-          globe.setProgress(cat, p.submitted, p.total);
         }
-      } catch (e) {
+        if (event.data == YT.PlayerState.ENDED) {
+          showGlobeAndMiddleVideo();
+        }
+      }
+
+      function startVideoSequence() {
+        // Now handled entirely by onYouTubeIframeAPIReady
+        // We leave this function empty so the earlier call startVideoSequence() doesn't break.
+      }
+
+      function showGlobeAndMiddleVideo() {
+        if (hasSwapped) return;
+        hasSwapped = true;
+
+        const videoEl = document.getElementById('bg-video');
+        const nextVideoEl = document.getElementById('bg-video-next');
+        const globeEl = document.getElementById('globe-container');
+        const hudEl = document.querySelector('.gameboard-hud');
+        const starfieldEl = document.getElementById('starfield');
+
+        // Fade in globe, HUD, starfield
+        if(globeEl) globeEl.style.opacity = '1';
+        if(hudEl) hudEl.style.opacity = '1';
+        if(starfieldEl) starfieldEl.style.opacity = '1';
+
+        // Play second video, crossfade
+        if (ytPlayer2 && typeof ytPlayer2.playVideo === 'function') {
+          ytPlayer2.playVideo();
+        }
+        if (nextVideoEl) nextVideoEl.style.opacity = '1';
+        if (videoEl) videoEl.style.opacity = '0';
+      }
+catch (e) {
         console.error('Failed to load progress:', e);
       }
     }
