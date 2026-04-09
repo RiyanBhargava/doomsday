@@ -28,7 +28,7 @@
       object-fit: cover;
       object-position: center 40%;
       z-index: 0;
-      transform: scale(1.35); /* Zooms in to crop black pillarboxing edges */
+      transform: scale(1.35) translateY(4%); /* Zooms in and moves slightly downwards */
       transform-origin: center center;
     }
     .globe-container {
@@ -1068,6 +1068,10 @@
 
       function onPlayer2StateChange(event) {
         if (event.data == YT.PlayerState.PLAYING) {
+          // Hide video 1 ONLY AFTER video 2 has started rendering frames
+          const videoEl = document.getElementById('bg-video');
+          if (videoEl) videoEl.style.opacity = '0';
+
           // Poll to freeze at the last frame right before it ends to prevent YouTube "More Videos" grid from showing
           if (!freezePoller) {
             freezePoller = setInterval(() => {
@@ -1102,12 +1106,11 @@
         if(hudEl) hudEl.style.opacity = '1';
         if(starfieldEl) starfieldEl.style.opacity = '1';
 
-        // Play second video, crossfade
+        // Play second video, fade it in immediately over the old video (DON'T fade old one until playing)
         if (ytPlayer2 && typeof ytPlayer2.playVideo === 'function') {
           ytPlayer2.playVideo();
         }
         if (nextVideoEl) nextVideoEl.style.opacity = '1';
-        if (videoEl) videoEl.style.opacity = '0';
       }
 
       // ── Load Progress ─────────────────────────────────────────────────────────
