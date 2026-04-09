@@ -1074,11 +1074,10 @@
 
       await loadProgress();
       await loadAnnouncements();
+      startCountdown();
 
-      // Start video sequence
-      startVideoSequence();
-    }
-
+      // Initialize globe but don't show yet
+      globe.init(document.getElementById('globe-canvas'));
     
             // ── Video Background Sequence ─────────────────────────────────────────────────────────────
       let ytPlayer1;
