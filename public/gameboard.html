@@ -1021,34 +1021,41 @@
     }
 
     
-      // ── Video Background Sequence ─────────────────────────────────────────────────────────────
+            // ── Video Background Sequence ─────────────────────────────────────────────────────────────
       let ytPlayer1, ytPlayer2;
       let hasSwapped = false;
       let fallbackTimer;
+      let freezePoller;
 
       function onYouTubeIframeAPIReady() {
         ytPlayer1 = new YT.Player('bg-video', {
           videoId: '4h_QuV0BG0g', // DOOM STARTING
-          playerVars: { 'autoplay': 1, 'controls': 0, 'showinfo': 0, 'rel': 0, 'mute': 1, 'playsinline': 1, 'modestbranding': 1, 'fs': 0 },
+          playerVars: { 'autoplay': 1, 'controls': 0, 'showinfo': 0, 'rel': 0, 'mute': 1, 'playsinline': 1, 'modestbranding': 1, 'fs': 0, 'vq': 'hd2160' },
           events: {
-            'onReady': onPlayerReady,
-            'onStateChange': onPlayerStateChange
+            'onReady': onPlayer1Ready,
+            'onStateChange': onPlayer1StateChange
           }
         });
 
         ytPlayer2 = new YT.Player('bg-video-next', {
           videoId: '4h_QuV0BG0g', // DOOM MIDDLE (Temporary placeholder)
-          playerVars: { 'autoplay': 0, 'controls': 0, 'showinfo': 0, 'rel': 0, 'mute': 1, 'playsinline': 1, 'modestbranding': 1, 'fs': 0, 'loop': 1, 'playlist': '4h_QuV0BG0g' }
+          playerVars: { 'autoplay': 0, 'controls': 0, 'showinfo': 0, 'rel': 0, 'mute': 1, 'playsinline': 1, 'modestbranding': 1, 'fs': 0, 'vq': 'hd2160' },
+          events: {
+            'onReady': (e) => { e.target.setPlaybackQuality('hd2160'); e.target.setVolume(0); },
+            'onStateChange': onPlayer2StateChange
+          }
         });
 
         fallbackTimer = setTimeout(showGlobeAndMiddleVideo, 5000); // 5 sec fallback
       }
 
-      function onPlayerReady(event) {
+      function onPlayer1Ready(event) {
+        event.target.setPlaybackQuality('hd2160');
+        event.target.setVolume(0);
         event.target.playVideo();
       }
 
-      function onPlayerStateChange(event) {
+      function onPlayer1StateChange(event) {
         if (event.data == YT.PlayerState.PLAYING) {
           clearTimeout(fallbackTimer);
         }
@@ -1057,9 +1064,25 @@
         }
       }
 
+      function onPlayer2StateChange(event) {
+        if (event.data == YT.PlayerState.PLAYING) {
+          // Poll to freeze at the last frame right before it ends to prevent YouTube "More Videos" grid from showing
+          if (!freezePoller) {
+            freezePoller = setInterval(() => {
+              if (ytPlayer2 && ytPlayer2.getDuration) {
+                const timeLeft = ytPlayer2.getDuration() - ytPlayer2.getCurrentTime();
+                if (timeLeft > 0 && timeLeft <= 0.15) {
+                  ytPlayer2.pauseVideo();
+                  clearInterval(freezePoller);
+                }
+              }
+            }, 50);
+          }
+        }
+      }
+
       function startVideoSequence() {
-        // Now handled entirely by onYouTubeIframeAPIReady
-        // We leave this function empty so the earlier call startVideoSequence() doesn't break.
+        // Handled intrinsically
       }
 
       function showGlobeAndMiddleVideo() {
