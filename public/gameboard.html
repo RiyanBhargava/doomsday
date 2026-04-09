@@ -1255,9 +1255,8 @@
       });
 
       // Clear inputs
-      document.getElementById('answer-text-input').value = '';
-      document.getElementById('answer-code-input').value = '';
-      document.getElementById('submission-file').value = '';
+        const singleInput = document.getElementById('answer-link-input');
+        if (singleInput) singleInput.value = '';
 
       // Attempt info
       document.getElementById('attempt-info').textContent = q.submissions_count > 0
