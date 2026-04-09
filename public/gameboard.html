@@ -1462,13 +1462,19 @@
           list.innerHTML = '<div style="color:#555;font-size:11px;">No announcements yet.</div>';
           return;
         }
-        list.innerHTML = anns.map(a => `
-          <div class="ann-item-board">
-            ${escapeHtml(a.message)}
-            <div class="ann-time-board">${new Date(a.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
-          </div>
-        `).join('');
-      }
+      list.innerHTML = anns.map(a => `
+        <div class="ann-item-board">
+          ${escapeHtml(a.message)}
+          <div class="ann-time-board">${new Date(a.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
+        </div>
+      `).join('');
+    }
+
+    // ── Starfield ────────────────────────────────────────────────────────
+    (function initStarfield() {
+      const sc = document.getElementById('starfield');
+      const sctx = sc.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
       let sw, sh, stars = [], shooters = [];
 
       function resize() {
