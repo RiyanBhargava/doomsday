@@ -99,6 +99,10 @@ io.on('connection', (socket) => {
     io.emit('announcement', msg);
   });
 
+  socket.on('broadcast_announcement_clear', () => {
+    io.emit('announcement_clear');
+  });
+
   socket.on('maintenance_change', (active) => {
     if (active) io.emit('maintenance');
   });

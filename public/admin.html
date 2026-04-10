@@ -153,6 +153,7 @@
           <div style="display:flex;gap:8px;">
             <input type="text" class="input-field" id="broadcast-msg" placeholder="Type announcement..." style="flex:1;">
             <button class="btn btn-primary btn-small" onclick="broadcastAnnouncement()">Send</button>
+            <button class="btn btn-danger btn-small" onclick="clearAnnouncements()">Clear All</button>
           </div>
         </div>
 
@@ -462,6 +463,17 @@
         document.getElementById('broadcast-msg').value = '';
         showToast('Announcement sent');
       } catch (e) { showToast('Failed', 'error'); }
+    }
+
+    async function clearAnnouncements() {
+      if (!confirm('Are you sure you want to clear all past announcements?')) return;
+      try {
+        await fetch('/admin/announcements', { method: 'DELETE' });
+        showToast('Announcements cleared');
+        if (typeof socket !== 'undefined' && socket) {
+           socket.emit('broadcast_announcement_clear');
+        }
+      } catch (e) { showToast('Failed to clear announcements', 'error'); }
     }
 
     // ── QUESTIONS ─────────────────────────────────────────────────────────────

@@ -213,6 +213,11 @@ router.post('/announcement', (req, res) => {
   res.json({ success: true, message });
 });
 
+router.delete('/announcements', (req, res) => {
+  db.prepare('DELETE FROM announcements').run();
+  res.json({ success: true, message: 'All announcements cleared' });
+});
+
 // ── TEAM MANAGEMENT ──────────────────────────────────────────────────────────
 router.get('/teams', (req, res) => {
   const teams = db.prepare(`
